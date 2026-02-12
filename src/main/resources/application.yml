@@ -1,0 +1,101 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+spring:
+  config:
+    import:
+      - classpath:product-config.yml
+  datasource:
+    url: jdbc:mysql://localhost:${DATABASE.PORT}/${DATABASE.NAME}?characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${DATABASE.USERNAME}
+    password: ${DATABASE.PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    type: com.alibaba.druid.pool.DruidDataSource
+    druid:
+      initial-size: 20 # 初始连接数
+      min-idle: 10 # 最小空闲连接数
+      max-active: 100 # 最大连接数
+  mvc:
+    pathmatch:
+      matching-strategy: ant_path_matcher
+  # 序列化配置
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+    serialization:
+      write-dates-as-timestamps: false
+
+  redis:
+    host: localhost
+    port: 6379
+    password: miako
+    database: 0
+    timeout: 3000ms
+    lettuce:
+      pool:
+        max-active: 8
+        max-wait: -1ms
+        max-idle: 8
+        min-idle: 0
+  cache:
+    type: redis
+    redis:
+      time-to-live: 3600000 # 1小时默认缓存时间
+      cache-null-values: true
+
+# JWT配置（移出spring.security节点）
+jwt:
+  secret: green-finance_secret_key_2025
+  expiration: 604800000 # 7天
+  ignore-paths:
+    /auth/register,
+    /auth/login,
+    /swagger-ui/**,
+    /v3/api-docs/**,
+    /error,
+    /favicon.ico,
+    /actuator/health,
+    /css/**,
+    /js/**,
+    /images/**,
+    /webjars/**,
+    /uploads/**
+
+mybatis-plus:
+  global-config:
+    db-config:
+      #id类型: 自增
+      id-type: auto
+      logic-delete-value: 1 # 逻辑已删除值(默认为 1)
+      logic-not-delete-value: 0 # 逻辑未删除值(默认为 0)
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl #控制台打印，生产环境换日志打印
+  type-aliases-package: com.it.greenfinance.pojo
+  mapper-locations: classpath:com/it/greenfinance/mapper/xml/*.xml
+
+logging:
+  level:
+    com.it.greenfinance: debug
+
+# AI配置
+ai:
+  # Qwen2.5-7B模型配置
+  # model-type: dashscope（阿里云DashScope API）或 openai（OpenAI兼容API，如vLLM部署）
+  model-type: OpenAI
+  # 是否启用Qwen模型（true-启用，false-使用HanLP作为兜底方案）
+  model-enabled: true
+  # API地址（DashScope无需配置，OpenAI兼容API需要配置完整URL，如：http://localhost:25010）
+  model-api-url: https://api-inference.modelscope.cn/v1/chat/completions
+  # API密钥（DashScope需要配置，OpenAI兼容API可选）
+  model-api-key: ms-bfcc689c-652f-4df4-b26b-a9dfaf846b85
+  # OCR识别开关
+  ocr-enabled: true
+  # 财务建议开关
+  advice-enabled: true
+  rate-limit:
+    per-minute: 5
+
+crypto:
+  secret: greenfinance-secret-2025

@@ -1,0 +1,22 @@
+# 项目名(注意，该项目项目名字必须与idea创建项目时的项目名一致，就是当前idea窗口Project下面的名字)
+PRODUCT_NAME: greenfinance
+
+# 数据库名
+DATABASE:
+  NAME: greenfinance
+# 数据库账号密码端口
+  USERNAME: root
+  PASSWORD: root
+  PORT: 3306
+
+# 要自动生成代码的表名
+TABLE:
+  -"bill"
+  -"budget"
+  -"category"
+  -"category_keyword"
+  -"expected_expense"
+  -"sub_category"
+  -"system_config"
+  -"user"
+

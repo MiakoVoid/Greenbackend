@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.it.greenfinance.mapper.CategoryKeywordMapper">
+    
+    <!-- 根据关键词查找匹配的分类关键词列表 -->
+    <select id="findByKeyword" resultType="com.it.greenfinance.pojo.CategoryKeyword">
+        SELECT * FROM category_keyword 
+        WHERE (user_id = #{userId} OR user_id = 0) 
+        AND keyword LIKE CONCAT('%', #{keyword}, '%')
+        ORDER BY user_id ASC, weight DESC, create_time DESC
+    </select>
+    
+    <!-- 根据关键词精确查找匹配的分类关键词 -->
+    <select id="findByExactKeyword" resultType="com.it.greenfinance.pojo.CategoryKeyword">
+        SELECT * FROM category_keyword 
+        WHERE (user_id = #{userId} OR user_id = 0) 
+        AND keyword = #{keyword}
+        ORDER BY user_id ASC, weight DESC, create_time DESC
+        LIMIT 1
+    </select>
+    
+    <!-- 根据关键词查找启用状态的分类关键词列表（按权重排序） -->
+    <select id="findActiveByKeywordOrderByWeight" resultType="com.it.greenfinance.pojo.CategoryKeyword">
+        SELECT * FROM category_keyword 
+        WHERE (user_id = #{userId} OR user_id = 0) 
+        AND keyword LIKE CONCAT('%', #{keyword}, '%')
+        AND status = 1
+        ORDER BY user_id ASC, weight DESC, create_time DESC
+    </select>
+    
+    <!-- 获取所有启用的商户名关键词（按权重&创建时间排序，避免 DISTINCT+ORDER BY 兼容性问题） -->
+    <select id="findAllActiveMerchants" resultType="java.lang.String">
+        SELECT keyword
+        FROM category_keyword
+        WHERE status = 1 AND type = 3
+        GROUP BY keyword
+        ORDER BY MAX(weight) DESC, MAX(create_time) DESC
+    </select>
+    
+    <!-- 获取所有启用的分类关键词（按权重&创建时间排序，避免 DISTINCT+ORDER BY 兼容性问题） -->
+    <select id="findAllActiveCategoryKeywords" resultType="java.lang.String">
+        SELECT keyword
+        FROM category_keyword
+        WHERE status = 1 AND (type = 1 OR type = 2)
+        GROUP BY keyword
+        ORDER BY MAX(weight) DESC, MAX(create_time) DESC
+    </select>
+</mapper>
