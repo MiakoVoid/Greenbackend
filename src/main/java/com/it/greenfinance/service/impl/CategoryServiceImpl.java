@@ -10,8 +10,6 @@ import com.it.greenfinance.pojo.bo.CategoryBo;
 import com.it.greenfinance.pojo.vo.CategoryVo;
 import com.it.greenfinance.service.CategoryService;
 import org.springframework.beans.BeanUtils;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -35,7 +33,6 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
     }
     
     @Override
-    @Cacheable(value = "category", key = "#userId + ':' + (#type != null ? #type : 'all')")
     public List<CategoryVo> getUserCategoriesWithSubCategories(Long userId, Integer type) {
         QueryWrapper<Category> queryWrapper = new QueryWrapper<>();
         queryWrapper.nested(wrapper -> {
@@ -76,7 +73,6 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
     }
     
     @Override
-    @CacheEvict(value = "category", allEntries = true)
     public CategoryVo saveCategory(CategoryBo categoryBo, Long userId) {
         validateCategoryForCreate(categoryBo, userId);
 
@@ -113,7 +109,6 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
     }
     
     @Override
-    @CacheEvict(value = "category", allEntries = true)
     public boolean removeCategoryById(Long id, Long userId) {
         if (id == null) {
             throw new IllegalArgumentException("分类ID不能为空");

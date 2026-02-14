@@ -17,9 +17,6 @@ import com.it.greenfinance.service.BillService;
 import com.it.greenfinance.service.BudgetService;
 import com.it.utils.UserContextUtil;
 import org.springframework.beans.BeanUtils;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -252,11 +249,6 @@ public class BillServiceImpl extends ServiceImpl<BillMapper, Bill> implements Bi
     
     @Override
     @Transactional(rollbackFor = Exception.class)
-    @Caching(evict = {
-        @CacheEvict(value = "billStats", allEntries = true),
-        @CacheEvict(value = "budgetStats", allEntries = true),
-        @CacheEvict(value = "billDetail", key = "#id")
-    })
     public boolean removeBillById(Long id) {
         Long userId = userContextUtil.getCurrentUserId();
         // 检查账单是否属于当前用户
@@ -281,7 +273,6 @@ public class BillServiceImpl extends ServiceImpl<BillMapper, Bill> implements Bi
  * @return 包含各类统计数据的Map，键为统计类型，值为对应金额
  */
     @Override
-    @Cacheable(value = "billStats", key = "@userContextUtil.getCurrentUserId()")
     public Map<String, BigDecimal> getBillStatistics() {
     // 获取当前用户ID
         Long userId = userContextUtil.getCurrentUserId();

@@ -11,8 +11,6 @@ import com.it.greenfinance.service.SystemConfigService;
 import com.it.utils.UserContextUtil;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import cn.hutool.crypto.SecureUtil;
@@ -69,7 +67,6 @@ public class SystemConfigServiceImpl extends ServiceImpl<SystemConfigMapper, Sys
     }
     
     @Override
-    @CacheEvict(value = "systemConfig", allEntries = true)
     public SystemConfigVo create(SystemConfigBo systemConfigBo) {
         validateSystemConfigForCreate(systemConfigBo);
 
@@ -123,7 +120,6 @@ public class SystemConfigServiceImpl extends ServiceImpl<SystemConfigMapper, Sys
     }
     
     @Override
-    @CacheEvict(value = "systemConfig", allEntries = true)
     public SystemConfigVo update(SystemConfigBo systemConfigBo) {
         if (systemConfigBo == null || systemConfigBo.getId() == null) {
             throw new IllegalArgumentException("系统配置ID不能为空");
@@ -175,7 +171,6 @@ public class SystemConfigServiceImpl extends ServiceImpl<SystemConfigMapper, Sys
     }
     
     @Override
-    @Cacheable(value = "systemConfig", key = "#configKey + ':' + @userContextUtil.getCurrentUserId()")
     public String getConfigValue(String configKey) {
         Long userId = userContextUtil.getCurrentUserId();
         String value = systemConfigMapper.getConfigValue(configKey, userId);

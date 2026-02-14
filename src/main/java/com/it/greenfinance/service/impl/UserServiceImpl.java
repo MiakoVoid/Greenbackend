@@ -12,8 +12,6 @@ import com.it.utils.Result;
 import com.it.utils.UserContextUtil;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -168,7 +166,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
     
     @Override
-    @Cacheable(value = "user", key = "#userBo.id", condition = "#userBo.id != null")
     public UserVo getDetail(UserBo userBo) {
         User user = getOne(buildQueryWrapper(userBo));
         
@@ -179,7 +176,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
     
     @Override
-    @CacheEvict(value = "user", key = "@userContextUtil.getCurrentUserId()")
     public UserVo update(UserBo userBo) {
         Long userId = userContextUtil.getCurrentUserId();
         User user = getById(userId);
@@ -207,7 +203,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
     
     @Override
-    @CacheEvict(value = "user", key = "@userContextUtil.getCurrentUserId()")
     public Result updateAvatar(String avatarPath) {
         Long userId = userContextUtil.getCurrentUserId();
         User user = getById(userId);
@@ -243,7 +238,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
     
     @Override
-    @CacheEvict(value = "user", key = "#userId")
     public Result cancelDeactivation(Long userId) {
         User user = getById(userId);
         if (user == null) {

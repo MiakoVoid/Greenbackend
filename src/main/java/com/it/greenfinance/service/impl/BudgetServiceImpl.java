@@ -16,7 +16,6 @@ import com.it.greenfinance.service.BudgetService;
 import com.it.utils.UserContextUtil;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.BeanUtils;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -139,7 +138,6 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
     
     
     @Override
-    @Cacheable(value = "budgetStats", key = "#bo.userId + ':' + #bo.year + ':' + #bo.month")
     public BudgetStatisticsVo getStatistics(BudgetBo bo) {
         if(bo.getYear()== null|| bo.getMonth()== null)
             throw new IllegalArgumentException("参数错误");

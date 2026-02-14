@@ -1,21 +1,17 @@
 package com.it.utils;
 
 import io.jsonwebtoken.*;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class JwtUtil {
-    
-    @Autowired
-    private StringRedisTemplate redisTemplate;
     
     @Value("${jwt.secret}")
     private String secret;
@@ -23,8 +19,8 @@ public class JwtUtil {
     @Value("${jwt.expiration}")
     private Long expiration;
     
-    // Redis key prefix for blacklisted tokens
-    private static final String BLACKLIST_PREFIX = "jwt:blacklist:";
+    // 用于存储已注销的令牌的黑名单
+    private final Set<String> blacklistedTokens = ConcurrentHashMap.newKeySet();
     
     // 生成JWT令牌
     public String generateToken(String username, Long userId) {
@@ -46,7 +42,7 @@ public class JwtUtil {
     public Boolean validateToken(String token) {
         try {
             // 检查令牌是否在黑名单中
-            if (isTokenBlacklisted(token)) {
+            if (blacklistedTokens.contains(token)) {
                 return false;
             }
             
@@ -64,7 +60,7 @@ public class JwtUtil {
     public Boolean validateTokenAndCheckExpiration(String token) {
         try {
             // 检查令牌是否在黑名单中
-            if (isTokenBlacklisted(token)) {
+            if (blacklistedTokens.contains(token)) {
                 return false;
             }
             
@@ -120,7 +116,7 @@ public class JwtUtil {
     private Claims getClaimsFromToken(String token) {
         try {
             // 检查令牌是否在黑名单中
-            if (isTokenBlacklisted(token)) {
+            if (blacklistedTokens.contains(token)) {
                 throw new ExpiredJwtException(null, null, "Token is blacklisted");
             }
             
@@ -147,14 +143,11 @@ public class JwtUtil {
     
     // 将令牌加入黑名单（注销）
     public void invalidateToken(String token) {
-        long remainingTime = getRemainingTime(token);
-        if (remainingTime > 0) {
-            redisTemplate.opsForValue().set(BLACKLIST_PREFIX + token, "true", remainingTime, TimeUnit.MILLISECONDS);
-        }
+        blacklistedTokens.add(token);
     }
     
     // 检查令牌是否在黑名单中
     public boolean isTokenBlacklisted(String token) {
-        return Boolean.TRUE.equals(redisTemplate.hasKey(BLACKLIST_PREFIX + token));
+        return blacklistedTokens.contains(token);
     }
 }

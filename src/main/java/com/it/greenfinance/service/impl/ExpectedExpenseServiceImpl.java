@@ -12,9 +12,6 @@ import com.it.greenfinance.service.BillService;
 import com.it.greenfinance.service.CategoryService;
 import com.it.greenfinance.service.ExpectedExpenseService;
 import org.springframework.beans.BeanUtils;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -92,11 +89,6 @@ public class ExpectedExpenseServiceImpl extends ServiceImpl<ExpectedExpenseMappe
     }
     
     @Override
-    @Caching(evict = {
-        @CacheEvict(value = "expectedExpense", allEntries = true),
-        @CacheEvict(value = "budgetStats", allEntries = true),
-        @CacheEvict(value = "billStats", allEntries = true)
-    })
     public ExpectedExpenseVo create(ExpectedExpenseBo expectedExpenseBo) {
         validateExpectedExpenseForCreate(expectedExpenseBo);
 
@@ -191,11 +183,6 @@ public class ExpectedExpenseServiceImpl extends ServiceImpl<ExpectedExpenseMappe
     }
     
     @Override
-    @Caching(evict = {
-        @CacheEvict(value = "expectedExpense", allEntries = true),
-        @CacheEvict(value = "budgetStats", allEntries = true),
-        @CacheEvict(value = "billStats", allEntries = true)
-    })
     public boolean confirm(Long id, Long userId) {
         // 根据ID和用户ID获取预计支出记录
         ExpectedExpenseBo queryBo = new ExpectedExpenseBo();
