@@ -83,9 +83,11 @@ class BillServiceImplTest {
         billBo.setOriginalAmount(new BigDecimal("100.00"));
         billBo.setRefundAmount(new BigDecimal("20.00"));
         billBo.setType(1);
+        billBo.setCategoryId(1L); // 添加必需的分类ID字段
 
         when(userContextUtil.getCurrentUserId()).thenReturn(userId);
         when(billMapper.insert(any(Bill.class))).thenReturn(1);
+        when(categoryMapper.selectById(1L)).thenReturn(new Category()); // Mock category lookup
 
         // Act
         BillVo result = billService.createBill(billBo);
