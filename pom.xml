@@ -30,6 +30,7 @@
             <exclusions>
             </exclusions>
         </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
@@ -48,13 +49,13 @@
             <version>2.7.12</version>
         </dependency>
 
-        <!-- springboot本地缓存-->
+        <!-- springboot 本地缓存-->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-cache</artifactId>
         </dependency>
-
-        <!--mp和mysql驱动依赖-->
+        
+        <!--mp 和 mysql 驱动依赖-->
         <dependency>
             <groupId>com.baomidou</groupId>
             <artifactId>mybatis-plus-boot-starter</artifactId>
@@ -223,6 +224,10 @@
                 </configuration>
             </plugin>
             <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
                 <version>0.8.10</version>
@@ -261,7 +266,7 @@
                 </executions>
             </plugin>
         </plugins>
-        <!-- 如果不添加此节点mybatis的mapper.xml文件都会被漏掉。 -->
+        <!-- 如果不添加此节点 mybatis 的 mapper.xml 文件都会被漏掉。 -->
         <resources>
             <resource>
                 <directory>src/main/java</directory>
@@ -280,10 +285,16 @@
                     <include>**/*.yaml</include>
                     <include>**/*.properties</include>
                     <include>**/*.xml</include>
+                    <include>**/*.html</include>
+                    <include>**/*.css</include>
+                    <include>**/*.js</include>
+                    <include>**/*.png</include>
+                    <include>**/*.jpg</include>
+                    <include>**/*.ico</include>
                 </includes>
                 <filtering>false</filtering>
             </resource>
-
+        
         </resources>
     </build>
 </project>

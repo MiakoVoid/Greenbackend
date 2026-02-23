@@ -56,8 +56,10 @@ public class SubCategoryServiceImpl extends ServiceImpl<SubCategoryMapper, SubCa
         BeanUtils.copyProperties(subCategoryBo, subCategory);
         subCategory.setUserId(userId);
         save(subCategory);
+        
         SubCategoryVo subCategoryVo = new SubCategoryVo();
         BeanUtils.copyProperties(subCategory, subCategoryVo);
+        
         return subCategoryVo;
     }
     
@@ -81,6 +83,7 @@ public class SubCategoryServiceImpl extends ServiceImpl<SubCategoryMapper, SubCa
         
         SubCategoryVo subCategoryVo = new SubCategoryVo();
         BeanUtils.copyProperties(subCategory, subCategoryVo);
+        
         return subCategoryVo;
     }
     
@@ -106,7 +109,9 @@ public class SubCategoryServiceImpl extends ServiceImpl<SubCategoryMapper, SubCa
         }
         
         // 删除子分类
-        return super.removeById(id);
+        boolean removed = super.removeById(id);
+        
+        return removed;
     }
 
     private void validateSubCategoryForCreate(SubCategoryBo bo, Long userId) {

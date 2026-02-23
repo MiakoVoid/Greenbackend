@@ -4,6 +4,7 @@ import com.it.greenfinance.pojo.vo.AnalyzedTransactionVo;
 import com.it.greenfinance.pojo.vo.FinancialAdviceVo;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Date;
 import java.util.List;
 
 public interface AIService {
@@ -40,4 +41,6 @@ public interface AIService {
      * @return Financial Advice VO
      */
     FinancialAdviceVo getFinancialAdvice(Long userId);
+    
+
 }

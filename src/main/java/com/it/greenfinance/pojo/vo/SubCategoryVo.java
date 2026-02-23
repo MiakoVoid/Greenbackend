@@ -38,9 +38,9 @@ public class SubCategoryVo implements Serializable {
     private String name;
 
     /**
-     * 图标标识（规则同主分类，为空时继承主分类图标）
+     * 子分类图标标识符（为空时继承主分类图标）
      */
-    private String iconIdentifier;
+    private String categoryIcon;
 
     /**
      * 排序序号（升序排列）

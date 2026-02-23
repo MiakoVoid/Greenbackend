@@ -32,10 +32,10 @@ public class CategoryBo implements Serializable {
     private String name;
 
     /**
-     * 图标标识（res:资源名/file:本地路径）
+     * 分类图标标识符
      */
     @Size(max = 255, message = "图标标识长度过长")
-    private String iconIdentifier;
+    private String categoryIcon;
 
     /**
      * 类型：1=支出，2=收入

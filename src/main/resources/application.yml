@@ -3,19 +3,11 @@ server:
   servlet:
     context-path: /api
 spring:
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
   config:
     import:
       - classpath:product-config.yml
-  datasource:
-    url: jdbc:mysql://localhost:${DATABASE.PORT}/${DATABASE.NAME}?characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
-    username: ${DATABASE.USERNAME}
-    password: ${DATABASE.PASSWORD}
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    type: com.alibaba.druid.pool.DruidDataSource
-    druid:
-      initial-size: 20 # 初始连接数
-      min-idle: 10 # 最小空闲连接数
-      max-active: 100 # 最大连接数
   mvc:
     pathmatch:
       matching-strategy: ant_path_matcher
@@ -25,11 +17,8 @@ spring:
     time-zone: GMT+8
     serialization:
       write-dates-as-timestamps: false
-
-# JWT配置（移出spring.security节点）
 jwt:
-  secret: green-finance_secret_key_2025
-  expiration: 604800000 # 7天
+  expiration: 604800000 # 7 天
   ignore-paths:
     /auth/register,
     /auth/login,
@@ -42,7 +31,29 @@ jwt:
     /js/**,
     /images/**,
     /webjars/**,
-    /uploads/**
+    /uploads/**,
+    /websocket-test.html,
+    /ws/**,
+    /sockjs/**,
+    /ws-test/**
+
+# 日志配置
+logging:
+  level:
+    # 减少 RMI 相关调试日志
+    sun.rmi: INFO
+    javax.management: INFO
+    # MyBatis 日志保持 DEBUG 级别以便 SQL 调试
+    com.it.greenfinance.mapper: DEBUG
+    # 减少 Tomcat 和 Spring 的 DEBUG 日志
+    org.apache.coyote: WARN
+    org.apache.tomcat: WARN
+    org.springframework.web: INFO
+    # 减少 Tomcat WebSocket 相关 DEBUG 日志
+    org.apache.coyote.http11: WARN
+    org.apache.tomcat.util.net: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
 
 mybatis-plus:
   global-config:
@@ -53,31 +64,6 @@ mybatis-plus:
       logic-not-delete-value: 0 # 逻辑未删除值(默认为 0)
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl #控制台打印，生产环境换日志打印
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
   type-aliases-package: com.it.greenfinance.pojo
   mapper-locations: classpath:com/it/greenfinance/mapper/xml/*.xml
-
-logging:
-  level:
-    com.it.greenfinance: debug
-
-# AI配置
-ai:
-  # Qwen2.5-7B模型配置
-  # model-type: dashscope（阿里云DashScope API）或 openai（OpenAI兼容API，如vLLM部署）
-  model-type: OpenAI
-  # 是否启用Qwen模型（true-启用，false-使用HanLP作为兜底方案）
-  model-enabled: true
-  # API地址（DashScope无需配置，OpenAI兼容API需要配置完整URL，如：http://localhost:25010）
-  model-api-url: https://api-inference.modelscope.cn/v1/chat/completions
-  # API密钥（DashScope需要配置，OpenAI兼容API可选）
-  model-api-key: ms-bfcc689c-652f-4df4-b26b-a9dfaf846b85
-  # OCR识别开关
-  ocr-enabled: true
-  # 财务建议开关
-  advice-enabled: true
-  rate-limit:
-    per-minute: 5
-
-crypto:
-  secret: greenfinance-secret-2025

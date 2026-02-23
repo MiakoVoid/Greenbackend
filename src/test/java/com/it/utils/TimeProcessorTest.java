@@ -1,6 +1,8 @@
 package com.it.utils;
 
 import org.junit.jupiter.api.Test;
+
+import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Date;

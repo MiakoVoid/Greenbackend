@@ -80,8 +80,10 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
         BeanUtils.copyProperties(categoryBo, category);
         category.setUserId(userId);
         save(category);
+        
         CategoryVo categoryVo = new CategoryVo();
         BeanUtils.copyProperties(category, categoryVo);
+        
         return categoryVo;
     }
     
@@ -105,6 +107,7 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
         
         CategoryVo categoryVo = new CategoryVo();
         BeanUtils.copyProperties(category, categoryVo);
+        
         return categoryVo;
     }
     

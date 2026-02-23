@@ -37,9 +37,9 @@ public class CategoryVo implements Serializable {
     private String name;
 
     /**
-     * 图标标识：系统图标用"res:资源名"（如"res:ic_food"），本地图标用"file:相对路径"（如"file:icons/custom1.png"）
+     * 分类图标标识符
      */
-    private String iconIdentifier;
+    private String categoryIcon;
 
     /**
      * 类型：1-支出，2-收入

@@ -38,10 +38,10 @@ public class SubCategoryBo implements Serializable {
     private String name;
 
     /**
-     * 图标标识，空则继承主分类
+     * 子分类图标标识符，空则继承主分类
      */
     @Size(max = 255, message = "图标标识长度过长")
-    private String iconIdentifier;
+    private String categoryIcon;
 
     /**
      * 排序序号，默认0

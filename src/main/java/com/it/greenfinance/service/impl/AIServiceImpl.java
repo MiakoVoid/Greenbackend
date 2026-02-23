@@ -273,38 +273,87 @@ public class AIServiceImpl implements AIService {
         StringBuilder summaryBuilder = new StringBuilder();
         summaryBuilder.append(String.format("月份: %d-%02d. ", now.getYear(), now.getMonthValue()));
 
-        // 统计各类别支出并找出最高支出类别
+        // 统计各类别支出并找出最高支出类别，同时构建饼图数据
+        List<FinancialAdviceVo.CategoryExpenseVo> categoryExpenseList = new ArrayList<>();
         if (stats != null && !stats.isEmpty()) {
             for (Map<String, Object> stat : stats) {
                 String catName = (String) stat.get("categoryName");
                 BigDecimal amount = (BigDecimal) stat.get("amount");
-                
+                        
                 totalExpense = totalExpense.add(amount);
-                
+                        
                 if (amount.compareTo(maxAmount) > 0) {
                     maxAmount = amount;
                     topCategory = catName;
                 }
                 summaryBuilder.append(String.format("%s: %.2f. ", catName, amount));
+                        
+                // 构建饼图数据
+                FinancialAdviceVo.CategoryExpenseVo categoryExpenseVo = new FinancialAdviceVo.CategoryExpenseVo();
+                categoryExpenseVo.setCategoryId((Long) stat.get("categoryId"));
+                categoryExpenseVo.setCategoryName(catName);
+                categoryExpenseVo.setAmount(amount);
+                categoryExpenseList.add(categoryExpenseVo);
+            }
+                    
+            // 计算百分比
+            for (FinancialAdviceVo.CategoryExpenseVo item : categoryExpenseList) {
+                BigDecimal percentage = totalExpense.compareTo(BigDecimal.ZERO) == 0 ? BigDecimal.ZERO 
+                    : item.getAmount().multiply(new BigDecimal("100")).divide(totalExpense, 2, BigDecimal.ROUND_HALF_UP);
+                item.setPercentage(percentage.toString() + "%");
             }
         }
-        summaryBuilder.append(String.format("总计: %.2f.", totalExpense));
-        
+        summaryBuilder.append(String.format("总计：%.2f.", totalExpense));
+                
         vo.setTotalExpense(totalExpense.toString());
         vo.setTopCategory(topCategory);
-        
+        vo.setCategoryExpenseList(categoryExpenseList);
+                
         // 生成本地建议
         if (totalExpense.compareTo(BigDecimal.ZERO) == 0) {
             vo.setLocalAdvice("本月暂无支出记录，继续保持记账习惯！");
         } else {
-            vo.setLocalAdvice(String.format("您本月共支出%.2f元，其中%s类别支出最高（%.2f元）。",
+            vo.setLocalAdvice(String.format("您本月共支出%.2f 元，其中%s类别支出最高（%.2f 元）。",
                     totalExpense, topCategory, maxAmount));
         }
-
-        // 2. 获取AI建议
+        
+        // 2. 获取近 7 天收支趋势数据
+        List<FinancialAdviceVo.DailyTrendVo> dailyTrendList = new ArrayList<>();
+        List<Map<String, Object>> trendData = billMapper.getDailyTrend(userId, 6); // 包括今天共 7 天
+                
+        for (Map<String, Object> trend : trendData) {
+            FinancialAdviceVo.DailyTrendVo trendVo = new FinancialAdviceVo.DailyTrendVo();
+            Object dateObj = trend.get("date");
+            trendVo.setDate(dateObj != null ? dateObj.toString() : "");
+            trendVo.setIncome((BigDecimal) trend.get("income"));
+            trendVo.setExpense((BigDecimal) trend.get("expense"));
+            dailyTrendList.add(trendVo);
+        }
+        vo.setDailyTrendList(dailyTrendList);
+                
+        // 3. 获取预计支出提醒
+        List<FinancialAdviceVo.ExpectedExpenseRemindVo> expectedExpenseList = new ArrayList<>();
+        com.it.greenfinance.pojo.bo.ExpectedExpenseBo queryBo = new com.it.greenfinance.pojo.bo.ExpectedExpenseBo();
+        queryBo.setStatus(1); // 只查询待支付的预计支出
+        List<com.it.greenfinance.pojo.vo.ExpectedExpenseVo> expectedExpenses = expectedExpenseService.list(userId, queryBo);
+                
+        if (expectedExpenses != null && !expectedExpenses.isEmpty()) {
+            for (com.it.greenfinance.pojo.vo.ExpectedExpenseVo expense : expectedExpenses) {
+                FinancialAdviceVo.ExpectedExpenseRemindVo remindVo = new FinancialAdviceVo.ExpectedExpenseRemindVo();
+                remindVo.setId(expense.getId());
+                remindVo.setRemark(expense.getRemark());
+                remindVo.setAmount(expense.getAmount());
+                remindVo.setDueDate(expense.getDueDate() != null ? expense.getDueDate().toString() : "");
+                remindVo.setStatus(expense.getStatus());
+                expectedExpenseList.add(remindVo);
+            }
+        }
+        vo.setExpectedExpenseList(expectedExpenseList);
+        
+        // 4. 获取 AI 建议
         String aiAdvice = qwenUtil.getFinancialAdvice(summaryBuilder.toString());
         vo.setAiAdvice(aiAdvice);
-
+        
         return vo;
     }
 
@@ -803,4 +852,5 @@ public class AIServiceImpl implements AIService {
             }
         });
     }
+
 }

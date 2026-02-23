@@ -111,4 +111,28 @@ public class BillController {
         Map<String, BigDecimal> statistics = billService.getBillStatistics();
         return Result.ok(statistics);
     }
+    
+    /**
+     * 模糊查询账单（支持备注、商户名、金额）
+     *
+     * @param page 页码
+     * @param size 每页数量
+     * @param keyword 搜索关键字
+     * @return 账单列表
+     */
+    @GetMapping("/search")
+    public Result searchBills(
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "20") Integer size,
+            @RequestParam(required = false) String keyword,
+            BillBo billBo) {
+        // 将关键字设置到 billBo 中
+        if (billBo == null) {
+            billBo = new BillBo();
+        }
+        billBo.setKeyword(keyword);
+        
+        Page<BillVo> voPage = billService.searchBills(page, size, billBo);
+        return Result.ok(voPage);
+    }
 }

@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.it.greenfinance.mapper.BillMapper;
 import com.it.greenfinance.mapper.CategoryMapper;
 import com.it.greenfinance.mapper.SubCategoryMapper;
+import com.it.greenfinance.mapper.SystemConfigMapper;
 import com.it.greenfinance.pojo.Bill;
 import com.it.greenfinance.pojo.Category;
 import com.it.greenfinance.pojo.SubCategory;
@@ -21,9 +22,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
+import java.time.LocalDate;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * <p>
@@ -41,12 +42,14 @@ public class BillServiceImpl extends ServiceImpl<BillMapper, Bill> implements Bi
     private final SubCategoryMapper subCategoryMapper;
     private final UserContextUtil userContextUtil;
     private final BudgetService budgetService;
+    private final SystemConfigMapper systemConfigMapper;
     
-    public BillServiceImpl(CategoryMapper categoryMapper, SubCategoryMapper subCategoryMapper, UserContextUtil userContextUtil, BudgetService budgetService) {
+    public BillServiceImpl(CategoryMapper categoryMapper, SubCategoryMapper subCategoryMapper, UserContextUtil userContextUtil, BudgetService budgetService, SystemConfigMapper systemConfigMapper) {
         this.categoryMapper = categoryMapper;
         this.subCategoryMapper = subCategoryMapper;
         this.userContextUtil = userContextUtil;
         this.budgetService = budgetService;
+        this.systemConfigMapper = systemConfigMapper;
     }
     
     @Override
@@ -92,7 +95,10 @@ public class BillServiceImpl extends ServiceImpl<BillMapper, Bill> implements Bi
             bill.setBillTime(new Date());
         }
         save(bill);
-        return convertToVo(bill);
+        
+        BillVo vo = convertToVo(bill);
+        
+        return vo;
     }
     
     
@@ -114,6 +120,15 @@ public class BillServiceImpl extends ServiceImpl<BillMapper, Bill> implements Bi
         // 时间筛选
         if (billBo.getBillTime() != null) {
             queryWrapper.like("bill_time", billBo.getBillTime());
+        }
+        // 时间范围筛选
+        if (billBo.getStartTime()!=null){
+            queryWrapper.ge("bill_time", billBo.getStartTime());
+            System.out.println(billBo.getStartTime());
+        }
+        if (billBo.getEndTime()!=null){
+            queryWrapper.le("bill_time", billBo.getEndTime());
+            System.out.println(billBo.getEndTime());
         }
         // 金额匹配
         if (billBo.getOriginalAmount()!= null) {
@@ -145,42 +160,9 @@ public class BillServiceImpl extends ServiceImpl<BillMapper, Bill> implements Bi
         queryWrapper.orderByDesc("bill_time");
         
         Page<Bill> resultPage = page(billPage, queryWrapper);
-        
-        // 收集分类ID，进行批量查询优化N+1问题
-        java.util.Set<Long> categoryIds = new java.util.HashSet<>();
-        java.util.Set<Long> subCategoryIds = new java.util.HashSet<>();
-        for (Bill bill : resultPage.getRecords()) {
-            if (bill.getCategoryId() != null) categoryIds.add(bill.getCategoryId());
-            if (bill.getSubCategoryId() != null) subCategoryIds.add(bill.getSubCategoryId());
-        }
-
-        Map<Long, String> categoryMap = new HashMap<>();
-        if (!categoryIds.isEmpty()) {
-            categoryMapper.selectBatchIds(categoryIds).forEach(c -> categoryMap.put(c.getId(), c.getName()));
-        }
-
-        Map<Long, String> subCategoryMap = new HashMap<>();
-        if (!subCategoryIds.isEmpty()) {
-            subCategoryMapper.selectBatchIds(subCategoryIds).forEach(sc -> subCategoryMap.put(sc.getId(), sc.getName()));
-        }
-
-        // 转换为VO
-        Page<BillVo> billVoPage = new Page<>(resultPage.getCurrent(), resultPage.getSize(), resultPage.getTotal());
-        billVoPage.setRecords(resultPage.getRecords().stream().map(bill -> {
-            BillVo vo = new BillVo();
-            BeanUtils.copyProperties(bill, vo);
-            vo.setUserId(userContextUtil.getCurrentUserId());
-            // 使用内存中的Map填充名称，避免循环查库
-            if (bill.getCategoryId() != null) {
-                vo.setCategoryName(categoryMap.get(bill.getCategoryId()));
-            }
-            if (bill.getSubCategoryId() != null) {
-                vo.setSubCategoryName(subCategoryMap.get(bill.getSubCategoryId()));
-            }
-            return vo;
-        }).collect(java.util.stream.Collectors.toList()));
-        
-        return billVoPage;
+            
+        // 转换为 VO（复用转换方法）
+        return convertToBillVoPage(resultPage);
     }
     
     @Override
@@ -244,7 +226,10 @@ public class BillServiceImpl extends ServiceImpl<BillMapper, Bill> implements Bi
         }
         bill.setUpdateTime(new Date());
         updateById(bill);
-        return convertToVo(bill);
+        
+        BillVo vo = convertToVo(bill);
+        
+        return vo;
     }
     
     @Override
@@ -264,39 +249,56 @@ public class BillServiceImpl extends ServiceImpl<BillMapper, Bill> implements Bi
         
         // 删除账单
         removeById(id);
+        
         return true;
     }
     
 /**
  * 获取账单统计信息的方法
  * 包括今日支出、本月收入、本月支出以及预算相关信息
- * @return 包含各类统计数据的Map，键为统计类型，值为对应金额
+ * @return 包含各类统计数据的 Map，键为统计类型，值为对应金额
  */
     @Override
     public Map<String, BigDecimal> getBillStatistics() {
-    // 获取当前用户ID
+    // 获取当前用户 ID
         Long userId = userContextUtil.getCurrentUserId();
     // 获取当前日期
-        Date now = new Date();
+        LocalDate today = LocalDate.now();
         
-    // 创建用于存储统计结果的Map
+    // 创建用于存储统计结果的 Map
         Map<String, BigDecimal> statistics = new HashMap<>();
         
         // 获取今日支出金额并添加到统计结果中
-        BigDecimal todayExpense = baseMapper.getDayAmountByType(userId, now, 1);
+        BigDecimal todayExpense = baseMapper.getDayAmountByType(userId, java.sql.Date.valueOf(today), 1);
         statistics.put("todayExpense", todayExpense);
         
-        // 获取本月收入金额并添加到统计结果中
-        BigDecimal monthIncome = baseMapper.getMonthAmountByType(userId, now, 2);
+        int billMonthStartDay = Integer.parseInt(systemConfigMapper.getBillMonthStartDay(userId));
+        LocalDate firstDayOfBillCycle = getFirstDayOfBillCycle(today, billMonthStartDay);
+        LocalDate lastDayOfBillCycle = getDayOfMonth(today, billMonthStartDay);
+        
+        // 获取本月收入金额并添加到统计结果中（按账单周期计算）
+        BigDecimal monthIncome = baseMapper.getBillCycleAmountByType(
+            userId, 
+            java.sql.Date.valueOf(firstDayOfBillCycle), 
+            java.sql.Date.valueOf(lastDayOfBillCycle), 
+            2
+        );
         statistics.put("monthIncome", monthIncome);
         
-        // 获取本月支出金额并添加到统计结果中
-        BigDecimal monthExpense = baseMapper.getMonthAmountByType(userId, now, 1);
+        // 获取本月支出金额并添加到统计结果中（按账单周期计算）
+        BigDecimal monthExpense = baseMapper.getBillCycleAmountByType(
+            userId, 
+            java.sql.Date.valueOf(firstDayOfBillCycle), 
+            java.sql.Date.valueOf(lastDayOfBillCycle), 
+            1
+        );
         statistics.put("monthExpense", monthExpense);
         
         // 调用预算服务获取预算信息 获得本月预算、已使用预算、每日预算、本日剩余预算
         BudgetBo budgetBo = BudgetBo.builder()
                 .userId(userId)
+                .year(today.getYear())
+                .month(today.getMonthValue())
                 .build();
         BudgetStatisticsVo budgetStatistics = budgetService.getStatistics(budgetBo);
         
@@ -313,15 +315,159 @@ public class BillServiceImpl extends ServiceImpl<BillMapper, Bill> implements Bi
     }
     
     /**
-     * 将Bill实体转换为BillVo
-     * @param bill Bill实体
-     * @return BillVo对象
+     * 模糊查询账单（支持备注、商户名、金额）
+     * @param page 页码
+     * @param size 每页条数
+     * @param billBo 查询条件（包含 keyword）
+     * @return 账单分页数据
+     */
+    @Override
+    public Page<BillVo> searchBills(Integer page, Integer size, BillBo billBo) {
+        Long userId = userContextUtil.getCurrentUserId();
+        Page<Bill> billPage = new Page<>(page, size);
+        QueryWrapper<Bill> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq(userId != null, "user_id", userId);
+        
+        // 关键字模糊查询（同时查询备注、商户名、金额）
+        if (billBo.getKeyword() != null && !billBo.getKeyword().trim().isEmpty()) {
+            String keyword = billBo.getKeyword().trim();
+            queryWrapper.and(wrapper -> 
+                wrapper.like("remark", keyword)
+                       .or()
+                       .like("merchant", keyword)
+                       .or()
+                       .like("original_amount", keyword)
+                       .or()
+                       .like("refund_amount", keyword)
+                       .or()
+                       .like("amount", keyword)
+            );
+        }
+        
+        // 时间筛选
+        if (billBo.getBillTime() != null) {
+            queryWrapper.like("bill_time", billBo.getBillTime());
+        }
+        // 时间范围筛选
+        if (billBo.getStartTime() != null) {
+            queryWrapper.ge("bill_time", billBo.getStartTime());
+        }
+        if (billBo.getEndTime() != null) {
+            queryWrapper.le("bill_time", billBo.getEndTime());
+        }
+        
+        // 分类筛选
+        if (billBo.getCategoryId() != null) {
+            queryWrapper.eq("category_id", billBo.getCategoryId());
+        }
+        
+        // 类型筛选
+        if (billBo.getType() != null) {
+            queryWrapper.eq("type", billBo.getType());
+        }
+        
+        // 按时间倒序排列
+        queryWrapper.orderByDesc("bill_time");
+        
+        Page<Bill> resultPage = page(billPage, queryWrapper);
+        
+        // 转换为 VO（复用原有逻辑）
+        return convertToBillVoPage(resultPage);
+    }
+    
+    /**
+     * 将 Bill 分页数据转换为 BillVo 分页数据
+     */
+    private Page<BillVo> convertToBillVoPage(Page<Bill> resultPage) {
+        // 收集分类 ID，进行批量查询优化 N+1 问题
+        Set<Long> categoryIds = new HashSet<>();
+        Set<Long> subCategoryIds = new HashSet<>();
+        for (Bill bill : resultPage.getRecords()) {
+            if (bill.getCategoryId() != null) categoryIds.add(bill.getCategoryId());
+            if (bill.getSubCategoryId() != null) subCategoryIds.add(bill.getSubCategoryId());
+        }
+
+        Map<Long, String> categoryMap = new HashMap<>();
+        Map<Long, String> categoryIconMap = new HashMap<>();
+        if (!categoryIds.isEmpty()) {
+            categoryMapper.selectBatchIds(categoryIds).forEach(c -> {
+                categoryMap.put(c.getId(), c.getName());
+                categoryIconMap.put(c.getId(), c.getCategoryIcon());
+            });
+        }
+
+        Map<Long, String> subCategoryMap = new HashMap<>();
+        Map<Long, String> subCategoryIconMap = new HashMap<>();
+        if (!subCategoryIds.isEmpty()) {
+            subCategoryMapper.selectBatchIds(subCategoryIds).forEach(sc -> {
+                subCategoryMap.put(sc.getId(), sc.getName());
+                subCategoryIconMap.put(sc.getId(), sc.getCategoryIcon());
+            });
+        }
+
+        // 转换为 VO
+        Page<BillVo> billVoPage = new Page<>(resultPage.getCurrent(), resultPage.getSize(), resultPage.getTotal());
+        billVoPage.setRecords(resultPage.getRecords().stream().map(bill -> {
+            BillVo vo = new BillVo();
+            BeanUtils.copyProperties(bill, vo);
+            vo.setUserId(userContextUtil.getCurrentUserId());
+            // 使用内存中的 Map 填充名称，避免循环查库
+            if (bill.getCategoryId() != null) {
+                vo.setCategoryName(categoryMap.get(bill.getCategoryId()));
+            }
+            if (bill.getSubCategoryId() != null) {
+                vo.setSubCategoryName(subCategoryMap.get(bill.getSubCategoryId()));
+            }
+            // 设置图标标识符：优先使用子分类图标，如果没有则使用主分类图标
+            if (bill.getSubCategoryId() != null && subCategoryIconMap.get(bill.getSubCategoryId()) != null) {
+                vo.setCategoryIcon(subCategoryIconMap.get(bill.getSubCategoryId()));
+            } else if (bill.getCategoryId() != null) {
+                vo.setCategoryIcon(categoryIconMap.get(bill.getCategoryId()));
+            }
+            return vo;
+        }).collect(Collectors.toList()));
+        
+        return billVoPage;
+    }
+    
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public List<BillVo> createBills(List<BillBo> bills) {
+        if (bills == null || bills.isEmpty()) {
+            throw new IllegalArgumentException("账单列表不能为空");
+        }
+        
+        Long userId = userContextUtil.getCurrentUserId();
+        if (userId == null) {
+            throw new IllegalArgumentException("请先登录后再创建账单");
+        }
+        
+        // 批量创建账单
+        List<BillVo> result = new ArrayList<>();
+        for (BillBo billBo : bills) {
+            try {
+                BillVo billVo = createBill(billBo);
+                result.add(billVo);
+            } catch (Exception e) {
+                // 记录错误并继续处理其他账单
+                throw new RuntimeException("创建账单失败：" + e.getMessage(), e);
+            }
+        }
+        
+        return result;
+    }
+    
+    /**
+     * 将 Bill 实体转换为 BillVo
+     * @param bill Bill 实体
+     * @return BillVo 对象
      */
     private BillVo convertToVo(Bill bill) {
         BillVo billVo = new BillVo();
         BeanUtils.copyProperties(bill, billVo);
         billVo.setUserId(userContextUtil.getCurrentUserId());
         setCategoryNames(bill, billVo);
+        setIconIdentifier(bill, billVo);
         return billVo;
     }
     
@@ -337,6 +483,76 @@ public class BillServiceImpl extends ServiceImpl<BillMapper, Bill> implements Bi
             if (subCategory != null) {
                 billVo.setSubCategoryName(subCategory.getName());
             }
+        }
+    }
+    
+    /**
+     * 设置图标标识符：优先使用子分类图标，若无则使用主分类图标
+     */
+    private void setIconIdentifier(Bill bill, BillVo billVo) {
+        if (bill.getSubCategoryId() != null) {
+            SubCategory subCategory = subCategoryMapper.selectById(bill.getSubCategoryId());
+            if (subCategory != null && subCategory.getCategoryIcon() != null) {
+                billVo.setCategoryIcon(subCategory.getCategoryIcon());
+                return;
+            }
+        }
+        if (bill.getCategoryId() != null) {
+            Category category = categoryMapper.selectById(bill.getCategoryId());
+            if (category != null && category.getCategoryIcon() != null) {
+                billVo.setCategoryIcon(category.getCategoryIcon());
+            }
+        }
+    }
+    
+    /**
+     * 获取账单周期的结束日期（最后一天）
+     * @param currentDate 当前日期
+     * @param billMonthStartDay 账单月起始日
+     * @return 账单周期结束日期
+     */
+    private LocalDate getDayOfMonth(LocalDate currentDate, int billMonthStartDay) {
+        LocalDate firstDayOfMonth;
+        try {
+            if (currentDate.getDayOfMonth() >= billMonthStartDay) {
+                // 当前日期大于等于起始日，账单月为当前月
+                firstDayOfMonth = LocalDate.of(currentDate.getYear(), currentDate.getMonthValue(), billMonthStartDay);
+            } else {
+                // 当前日期小于起始日，账单月为上个月
+                LocalDate prevMonth = currentDate.minusMonths(1);
+                // 处理月末日期的边界情况
+                int actualDay = Math.min(billMonthStartDay, prevMonth.lengthOfMonth());
+                firstDayOfMonth = LocalDate.of(prevMonth.getYear(), prevMonth.getMonthValue(), actualDay);
+            }
+        } catch (Exception e) {
+            // 如果日期计算出现异常，则使用默认日期
+            firstDayOfMonth = LocalDate.of(currentDate.getYear(), currentDate.getMonthValue(), 1);
+        }
+        
+        LocalDate lastDayOfMonth = firstDayOfMonth.plusMonths(1).minusDays(1);
+        return lastDayOfMonth;
+    }
+    
+    /**
+     * 获取账单周期的起始日期
+     * @param currentDate 当前日期
+     * @param billMonthStartDay 账单月起始日
+     * @return 账单周期起始日期
+     */
+    private LocalDate getFirstDayOfBillCycle(LocalDate currentDate, int billMonthStartDay) {
+        try {
+            if (currentDate.getDayOfMonth() >= billMonthStartDay) {
+                // 当前日期大于等于起始日，账单周期从本月起始日开始
+                return LocalDate.of(currentDate.getYear(), currentDate.getMonthValue(), billMonthStartDay);
+            } else {
+                // 当前日期小于起始日，账单周期从上月起始日开始
+                LocalDate prevMonth = currentDate.minusMonths(1);
+                int actualDay = Math.min(billMonthStartDay, prevMonth.lengthOfMonth());
+                return LocalDate.of(prevMonth.getYear(), prevMonth.getMonthValue(), actualDay);
+            }
+        } catch (Exception e) {
+            // 如果日期计算出现异常，则使用默认日期
+            return LocalDate.of(currentDate.getYear(), currentDate.getMonthValue(), 1);
         }
     }
 }

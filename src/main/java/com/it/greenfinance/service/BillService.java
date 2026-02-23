@@ -6,7 +6,9 @@ import com.it.greenfinance.pojo.bo.BillBo;
 import com.it.greenfinance.pojo.vo.BillVo;
 import com.baomidou.mybatisplus.extension.service.IService;
 
+import javax.validation.Valid;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -69,4 +71,16 @@ public interface BillService extends IService<Bill> {
     boolean removeBillById(Long id);
     
     Map<String, BigDecimal> getBillStatistics();
+    
+    /**
+     * 模糊查询账单（支持备注、商户名、金额）
+     *
+     * @param page 页码
+     * @param size 每页条数
+     * @param billBo 查询条件（包含 keyword）
+     * @return 账单分页数据
+     */
+    Page<BillVo> searchBills(Integer page, Integer size, BillBo billBo);
+    
+    List<BillVo> createBills(@Valid List<BillBo> bills);
 }

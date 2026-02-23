@@ -73,6 +73,11 @@ public class ExpectedExpenseVo implements Serializable {
      * 更新时间
      */
     private Date updateTime;
+    
+    /**
+     * 图标标识符
+     */
+    private String categoryIcon;
 
 
 }

@@ -48,8 +48,11 @@ public class ExpectedExpenseServiceImpl extends ServiceImpl<ExpectedExpenseMappe
         }
         ExpectedExpenseVo expectedExpenseVo = new ExpectedExpenseVo();
         BeanUtils.copyProperties(expectedExpense, expectedExpenseVo);
+        
+        // 设置分类图标
+        setCategoryIcon(expectedExpenseVo, expectedExpense);
+        
         return expectedExpenseVo;
-    
     }
     /**
      * 构建查询条件
@@ -65,12 +68,6 @@ public class ExpectedExpenseServiceImpl extends ServiceImpl<ExpectedExpenseMappe
         if (expectedExpenseBo.getCategoryId() != null)
             queryWrapper.eq("category_id", expectedExpenseBo.getCategoryId());
             
-        if (expectedExpenseBo.getAmount() != null)
-            queryWrapper.eq("amount", expectedExpenseBo.getAmount());
-        if (expectedExpenseBo.getRemark()!=null)
-            queryWrapper.eq("remark", expectedExpenseBo.getRemark());
-        if (expectedExpenseBo.getDueDate() != null)
-            queryWrapper.eq("due_date", expectedExpenseBo.getDueDate());
         if (expectedExpenseBo.getStatus() != null)
             queryWrapper.eq("status", expectedExpenseBo.getStatus());
         if (expectedExpenseBo.getCreateTime() != null)
@@ -102,30 +99,31 @@ public class ExpectedExpenseServiceImpl extends ServiceImpl<ExpectedExpenseMappe
     
  
     
-/**
- * 验证预期支出对象的有效性
- * @param expectedExpense 待验证的预期支出对象
- * @return 如果对象无效返回true，有效返回false
- */
-    private boolean isInvalid(ExpectedExpense expectedExpense) {
-            // 检查必要字段是否为空
-            if (expectedExpense == null) {
-                return true;
+
+    /**
+     * 设置分类图标（优先子分类，其次主分类）
+     * @param vo 预计支出 VO
+     * @param expense 预计支出实体
+     */
+    private void setCategoryIcon(ExpectedExpenseVo vo, ExpectedExpense expense) {
+        // 优先使用子分类图标
+        if (expense.getSubCategoryId() != null) {
+            Category subCategory = categoryService.getById(expense.getSubCategoryId());
+            if (subCategory != null && subCategory.getCategoryIcon() != null) {
+                vo.setCategoryIcon(subCategory.getCategoryIcon());
+                return;
             }
-            
-            // 检查用户ID是否存在
-            if (expectedExpense.getUserId() == null) {
-                return true;
+        }
+        
+        // 其次使用主分类图标
+        if (expense.getCategoryId() != null) {
+            Category category = categoryService.getById(expense.getCategoryId());
+            if (category != null && category.getCategoryIcon() != null) {
+                vo.setCategoryIcon(category.getCategoryIcon());
             }
-            
-            // 检查金额是否有效（大于0）
-            if (expectedExpense.getAmount() == null || expectedExpense.getAmount().compareTo(BigDecimal.valueOf(0.0)) <= 0) {
-                return true;
-            }
-            
-            // 检查分类ID是否存在
-        return expectedExpense.getCategoryId() == null;
+        }
     }
+
     /**
      * 列表
      */
@@ -140,6 +138,10 @@ public class ExpectedExpenseServiceImpl extends ServiceImpl<ExpectedExpenseMappe
             for (ExpectedExpense expectedExpense : expectedExpenses) {
                 ExpectedExpenseVo expectedExpenseVo = new ExpectedExpenseVo();
                 BeanUtils.copyProperties(expectedExpense, expectedExpenseVo);
+                
+                // 设置分类图标
+                setCategoryIcon(expectedExpenseVo, expectedExpense);
+                
                 expectedExpenseVos.add(expectedExpenseVo);
             }
             return expectedExpenseVos;
@@ -148,24 +150,63 @@ public class ExpectedExpenseServiceImpl extends ServiceImpl<ExpectedExpenseMappe
         return null;
     }
     /**
-     * 更新
+     * 更新预计支出
+     * @param userId 用户 ID
+     * @param expectedExpenseBo 预计支出业务对象
+     * @return 更新后的预计支出 VO
      */
     @Override
     public ExpectedExpenseVo update(Long userId, ExpectedExpenseBo expectedExpenseBo) {
-        expectedExpenseBo.setUserId(userId);
-        ExpectedExpense expectedExpense = this.getOne(buildQueryWrapper(expectedExpenseBo));
-        if (expectedExpense != null) {
-            BeanUtils.copyProperties(expectedExpenseBo, expectedExpense);
-            if (isInvalid(expectedExpense)) {
-                throw new IllegalArgumentException("预计支出信息不合法");
-            }
-            this.updateById(expectedExpense);
-            ExpectedExpenseVo expectedExpenseVo = new ExpectedExpenseVo();
-            BeanUtils.copyProperties(expectedExpense, expectedExpenseVo);
-            return expectedExpenseVo;
+        // 1. 参数校验
+        if (expectedExpenseBo == null) {
+            throw new IllegalArgumentException("预计支出参数不能为空");
         }
-        return null;
+        if (expectedExpenseBo.getId() == null) {
+            throw new IllegalArgumentException("预计支出 ID 不能为空");
+        }
+        // 2. 查询记录是否存在
+        ExpectedExpense existingExpense = this.getById(expectedExpenseBo.getId());
+        if (existingExpense == null) {
+            return null;
+        }
+        
+        // 3. 已确认的记录不允许修改
+        if (existingExpense.getStatus() == 2) {
+            throw new IllegalArgumentException("已确认的预计支出不允许修改");
+        }
+        
+        // 4. 更新字段（只更新非空字段）
+        if (expectedExpenseBo.getAmount() != null) {
+            if (expectedExpenseBo.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new IllegalArgumentException("预计支出金额必须大于 0");
+            }
+            existingExpense.setAmount(expectedExpenseBo.getAmount());
+        }
+        if (expectedExpenseBo.getCategoryId() != null) {
+            existingExpense.setCategoryId(expectedExpenseBo.getCategoryId());
+        }
+        if (expectedExpenseBo.getSubCategoryId() != null) {
+            existingExpense.setSubCategoryId(expectedExpenseBo.getSubCategoryId());
+        }
+        if (expectedExpenseBo.getRemark() != null) {
+            existingExpense.setRemark(expectedExpenseBo.getRemark());
+        }
+        if (expectedExpenseBo.getDueDate() != null) {
+            existingExpense.setDueDate(expectedExpenseBo.getDueDate());
+        }
+        if (expectedExpenseBo.getStatus() != null) {
+            existingExpense.setStatus(expectedExpenseBo.getStatus());
+        }
+        
+        // 5. 执行更新
+        this.updateById(existingExpense);
+        
+        // 6. 返回 VO
+        ExpectedExpenseVo result = new ExpectedExpenseVo();
+        BeanUtils.copyProperties(existingExpense, result);
+        return result;
     }
+    
     
     @Override
     public boolean delete(Long id, Long userId) {
@@ -193,26 +234,27 @@ public class ExpectedExpenseServiceImpl extends ServiceImpl<ExpectedExpenseMappe
         if (expectedExpense == null) {
             return false;
         }
+        if (expectedExpense.getStatus() == 2)return true;
         // 创建新的实际支出账单
         BillBo billBo = new BillBo();
         billBo.setUserId(expectedExpense.getUserId());
         billBo.setOriginalAmount(expectedExpense.getAmount());
         billBo.setRefundAmount(BigDecimal.ZERO);
         billBo.setType(1); // 支出
-        Category category = categoryService.getById(expectedExpense.getCategoryId());
-        billBo.setCategoryId(category.getId());
-        billBo.setMerchant(category.getName());
-        billBo.setSubCategoryId(expectedExpense.getSubCategoryId());
-        billBo.setRemark(expectedExpense.getRemark());
+        billBo.setPaymentMethod("预计支出");
+        billBo.setCategoryId(expectedExpense.getCategoryId());
+        if (expectedExpense.getSubCategoryId() != null){
+            billBo.setSubCategoryId(expectedExpense.getSubCategoryId());
+        }
+       if (expectedExpense.getRemark() != null){
+           billBo.setRemark(expectedExpense.getRemark());
+       }
         billBo.setBillTime(expectedExpense.getDueDate());
         if (billService.createBill(billBo)== null) {
             return false;
         }
         // 更新预计支出状态为已支付（2）
         expectedExpense.setStatus(2);
-        if (isInvalid(expectedExpense)){
-            return false;
-        }
         return this.updateById(expectedExpense);
     }
 

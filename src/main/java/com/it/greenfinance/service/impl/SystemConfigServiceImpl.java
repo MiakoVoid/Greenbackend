@@ -70,22 +70,37 @@ public class SystemConfigServiceImpl extends ServiceImpl<SystemConfigMapper, Sys
     public SystemConfigVo create(SystemConfigBo systemConfigBo) {
         validateSystemConfigForCreate(systemConfigBo);
 
-        SystemConfig systemConfig = new SystemConfig();
-        BeanUtils.copyProperties(systemConfigBo, systemConfig);
         Long userId = userContextUtil.getCurrentUserId();
         if (userId == null) {
             throw new IllegalArgumentException("请先登录后再创建系统配置");
         }
-        systemConfig.setUserId(userId);
 
-        // 对敏感配置值进行加密存储
-        if (isSensitiveKey(systemConfig.getConfigKey()) && systemConfig.getConfigValue() != null) {
-            systemConfig.setConfigValue(encrypt(systemConfig.getConfigValue()));
-        }
-
-        save(systemConfig);
+        // 检查该配置项是否已经存在（根据 userId 和 configKey 判断）
+        QueryWrapper<SystemConfig> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("user_id", userId)
+                    .eq("config_key", systemConfigBo.getConfigKey());
         
-        return convertToVo(systemConfig);
+        SystemConfig existingConfig = getOne(queryWrapper);
+        
+        if (existingConfig != null) {
+            // 配置项已存在，执行更新操作
+            systemConfigBo.setId(existingConfig.getId());
+            return update(systemConfigBo);
+        } else {
+            // 配置项不存在，执行创建操作
+            SystemConfig systemConfig = new SystemConfig();
+            BeanUtils.copyProperties(systemConfigBo, systemConfig);
+            systemConfig.setUserId(userId);
+
+            // 对敏感配置值进行加密存储
+            if (isSensitiveKey(systemConfig.getConfigKey()) && systemConfig.getConfigValue() != null) {
+                systemConfig.setConfigValue(encrypt(systemConfig.getConfigValue()));
+            }
+
+            save(systemConfig);
+            
+            return convertToVo(systemConfig);
+        }
     }
     
     @Override

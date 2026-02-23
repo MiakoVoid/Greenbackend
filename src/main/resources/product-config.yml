@@ -5,6 +5,7 @@ PRODUCT_NAME: greenfinance
 DATABASE:
   NAME: greenfinance
 # 数据库账号密码端口
+#  HOST: greenfinance-mysql.ns-rz18xxyx.svc
   USERNAME: root
   PASSWORD: root
   PORT: 3306
@@ -19,4 +20,3 @@ TABLE:
   -"sub_category"
   -"system_config"
   -"user"
-

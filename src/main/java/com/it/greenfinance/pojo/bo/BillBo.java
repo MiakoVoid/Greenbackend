@@ -1,7 +1,5 @@
-package com.it.greenfinance.pojo.bo;
+  package com.it.greenfinance.pojo.bo;
 
-import com.baomidou.mybatisplus.annotation.FieldFill;
-import com.baomidou.mybatisplus.annotation.TableField;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -93,12 +91,13 @@ public class BillBo implements Serializable {
     /**
      * 起止时间
      */
-    @DateTimeFormat(pattern = "yyyy-MM-dd")
+    @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private Date startTime;
-    @DateTimeFormat(pattern = "yyyy-MM-dd")
+    
+    @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private Date endTime;
     /**
-     * 用户ID
+     * 用户 ID
      */
     private Long userId;
     
@@ -108,4 +107,9 @@ public class BillBo implements Serializable {
      */
     @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private Date createTime;
+    
+    /**
+     * 搜索关键字（用于模糊查询备注、商户名、金额）
+     */
+    private String keyword;
 }

@@ -57,7 +57,10 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
         budget.setUserId(userId);
         isValid( budget);
         save(budget);
-        return convertToVo(budget);
+        
+        BudgetVo vo = convertToVo(budget);
+        
+        return vo;
     }
     
     /**
@@ -112,7 +115,10 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
         budget.setUserId(userId);
         isValid( budget);
         updateById(budget);
-        return convertToVo(budget);
+        
+        BudgetVo vo = convertToVo(budget);
+        
+        return vo;
     }
     
     @Override
@@ -133,7 +139,9 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
         }
         
         // 删除预算
-        return super.removeById(id);
+        boolean removed = super.removeById(id);
+        
+        return removed;
     }
     
     
@@ -143,9 +151,10 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
             throw new IllegalArgumentException("参数错误");
         LocalDate currentDate = LocalDate.now();
         
-        // 获取月度起始日
+        // 获取账单周期起始日和结束日
         int billMonthStartDay = Integer.parseInt(systemConfigMapper.getBillMonthStartDay(bo.getUserId()));
-        LocalDate lastDayOfMonth = getDayOfMonth(currentDate, billMonthStartDay);
+        LocalDate firstDayOfBillCycle = getFirstDayOfBillCycle(currentDate, billMonthStartDay);
+        LocalDate lastDayOfBillCycle = getDayOfMonth(currentDate, billMonthStartDay);
         
         // 获取本月预算
         Budget budget = getOne(buildQueryWrapper(bo));
@@ -155,9 +164,14 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
             totalBudget = budget.getAmount();
         }
         
-        // 获取本月已使用的支出（不包括今天）
+        // 获取本月已使用的支出（按账单周期计算，不包括今天）
         Date today = java.sql.Date.valueOf(currentDate);
-        BigDecimal used = billMapper.getMonthAmountByType(bo.getUserId(), today, 1);
+        BigDecimal used = billMapper.getBillCycleAmountByType(
+            bo.getUserId(), 
+            java.sql.Date.valueOf(firstDayOfBillCycle), 
+            today, 
+            1
+        );
         
         // 获取今天的支出
         BigDecimal todayExpense = billMapper.getDayAmountByType(bo.getUserId(), today, 1);
@@ -170,7 +184,7 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
         BigDecimal remaining = totalBudget.subtract(used).subtract(expected);
         
         // 计算每日预算 = 剩余预算 / 剩余天数
-        long remainingDaysLong = java.time.temporal.ChronoUnit.DAYS.between(currentDate, lastDayOfMonth) + 1;
+        long remainingDaysLong = java.time.temporal.ChronoUnit.DAYS.between(currentDate, lastDayOfBillCycle) + 1;
         int remainingDays = (int) Math.max(0, remainingDaysLong); // 确保不会为负数
         BigDecimal daily = (remainingDays > 0) ? remaining.divide(BigDecimal.valueOf(remainingDays), 2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
         
@@ -237,6 +251,29 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
         
         LocalDate lastDayOfMonth = firstDayOfMonth.plusMonths(1).minusDays(1);
         return lastDayOfMonth;
+    }
+    
+    /**
+     * 获取账单周期的起始日期
+     * @param currentDate 当前日期
+     * @param billMonthStartDay 账单月起始日
+     * @return 账单周期起始日期
+     */
+    private LocalDate getFirstDayOfBillCycle(LocalDate currentDate, int billMonthStartDay) {
+        try {
+            if (currentDate.getDayOfMonth() >= billMonthStartDay) {
+                // 当前日期大于等于起始日，账单周期从本月起始日开始
+                return LocalDate.of(currentDate.getYear(), currentDate.getMonthValue(), billMonthStartDay);
+            } else {
+                // 当前日期小于起始日，账单周期从上月起始日开始
+                LocalDate prevMonth = currentDate.minusMonths(1);
+                int actualDay = Math.min(billMonthStartDay, prevMonth.lengthOfMonth());
+                return LocalDate.of(prevMonth.getYear(), prevMonth.getMonthValue(), actualDay);
+            }
+        } catch (Exception e) {
+            // 如果日期计算出现异常，则使用默认日期
+            return LocalDate.of(currentDate.getYear(), currentDate.getMonthValue(), 1);
+        }
     }
     
     /**

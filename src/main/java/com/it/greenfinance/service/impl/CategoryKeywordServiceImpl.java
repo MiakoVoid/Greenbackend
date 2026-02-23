@@ -171,7 +171,7 @@ public class CategoryKeywordServiceImpl extends ServiceImpl<CategoryKeywordMappe
         
         // 设置用户ID相等条件（包括系统默认关键词）
         if (bo.getUserId() != null) {
-            queryWrapper.nested(wrapper -> wrapper.eq("user_id", bo.getUserId()).or().eq("user_id", 0));
+            queryWrapper.nested(wrapper -> wrapper.eq("user_id", bo.getUserId()));
         }
         
         // 如果主分类ID不为空，则添加主分类ID相等条件
