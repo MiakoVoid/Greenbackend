@@ -62,49 +62,6 @@ public class UserController {
         UserVo userVo = userService.update(userBo);
         return Result.ok("用户更新成功", userVo);
     }
-    
-    /**
-     * 上传用户头像
-     *
-     * @param file 头像文件
-     * @return 上传结果
-     */
-    @PostMapping("/avatar")
-    public Result uploadAvatar(@RequestParam("file") MultipartFile file) {
-        if (file.isEmpty()) {
-            return Result.error(400, "请选择要上传的文件");
-        }
-        
-        // 检查文件类型
-        String contentType = file.getContentType();
-        if (contentType == null || (!contentType.equals("image/jpeg") && !contentType.equals("image/png"))) {
-            return Result.error(400, "只支持JPEG和PNG格式的图片");
-        }
-        
-        // 检查文件大小（限制为2MB）
-        if (file.getSize() > 2 * 1024 * 1024) {
-            return Result.error(400, "文件大小不能超过2MB");
-        }
-        
-        try {
-            // 生成唯一文件名
-            String originalFilename = file.getOriginalFilename();
-            String fileExtension = "";
-            if (originalFilename != null && originalFilename.contains(".")) {
-                fileExtension = originalFilename.substring(originalFilename.lastIndexOf("."));
-            }
-            String newFilename = UUID.randomUUID().toString().replace("-", "") + fileExtension;
-            
-            // 构建文件存储路径（相对于安卓应用的文件目录）
-            String avatarPath = "files/greenfinance/avatars/" + newFilename;
-            
-            // 调用服务层更新用户头像路径
-            return userService.updateAvatar(avatarPath);
-        } catch (Exception e) {
-            return Result.error(500, "文件上传失败: " + e.getMessage());
-        }
-    }
-    
     /**
      * 取消用户注销申请
      *

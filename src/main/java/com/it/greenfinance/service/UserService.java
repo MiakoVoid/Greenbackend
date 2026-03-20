@@ -55,13 +55,6 @@ public interface UserService extends IService<User> {
      */
     UserVo update(UserBo userBo);
     
-    /**
-     * 更新用户头像
-     *
-     * @param avatarPath 头像路径
-     * @return 更新结果
-     */
-    Result updateAvatar(String avatarPath);
     
     /**
      * 用户申请注销账户
@@ -74,8 +67,24 @@ public interface UserService extends IService<User> {
     /**
      * 取消用户注销申请
      *
-     * @param userId 用户ID
+     * @param userId 用户 ID
      * @return 取消结果
      */
     Result cancelDeactivation(Long userId);
+    
+    /**
+     * 修改用户密码
+     *
+     * @param oldPassword 旧密码
+     * @param newPassword 新密码
+     * @return 修改结果
+     */
+    Result changePassword(String oldPassword, String newPassword);
+    
+    /**
+     * 用户注销账户（立即注销）
+     *
+     * @return 注销结果
+     */
+    Result deactivateAccount();
 }

@@ -58,7 +58,7 @@ public interface CategoryKeywordService extends IService<CategoryKeyword> {
      * @param id 分类关键词ID
      * @return 是否删除成功
      */
-    boolean removeById(Long id);
+    boolean delete(Long id);
     
     /**
      * 根据关键词查找匹配的分类（启用状态，按权重排序）

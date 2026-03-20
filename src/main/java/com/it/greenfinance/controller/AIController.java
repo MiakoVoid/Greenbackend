@@ -1,6 +1,7 @@
 package com.it.greenfinance.controller;
 
 import com.it.greenfinance.pojo.vo.FinancialAdviceVo;
+import com.it.greenfinance.pojo.vo.OcrBillParseResultVo;
 import com.it.greenfinance.service.AIService;
 import com.it.utils.Result;
 import com.it.utils.UserContextUtil;
@@ -51,22 +52,25 @@ public class AIController {
     }
 
     /**
-     * OCR批量记账接口
-     * 接收OCR识别出的文本行列表，解析为交易信息
+     * OCR 批量记账接口
+     * 接收 OCR 识别出的文本列表，解析为交易信息
      * 
-     * @param ocrTexts OCR识别出的文本列表
-     * @return 解析后的交易记录列表
+     * @param ocrTexts OCR 识别出的文本列表
+     * @return OCR账单解析结构化结果
      */
     @PostMapping("/ocr")
     public Result processOcrTexts(@RequestBody List<String> ocrTexts) {
+    
         if (ocrTexts == null || ocrTexts.isEmpty()) {
-            return Result.error(400, "OCR文本列表不能为空");
+            return Result.error(400, "OCR 文本列表不能为空");
         }
         Long userId = userContextUtil.getCurrentUserId();
         if (userId == null) {
             return Result.error(401, "请先登录");
         }
-        List<Object> result = aiService.processOcrTexts(userId, ocrTexts);
+        // 不自动创建账单，仅返回解析结果供前端确认
+        OcrBillParseResultVo result = aiService.processOcrTexts(userId, ocrTexts, false);
+        System.out.println( result);
         return Result.ok(result);
     }
 

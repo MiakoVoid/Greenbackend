@@ -65,11 +65,6 @@ public class CategoryKeyword implements Serializable {
     private Integer weight;
 
     /**
-     * 状态：1=启用，0=禁用（软删除，避免误删恢复麻烦）
-     */
-    private Integer status;
-
-    /**
      * 创建时间（自动填充）
      */
     @TableField(fill = FieldFill.INSERT)

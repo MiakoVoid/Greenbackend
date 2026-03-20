@@ -70,9 +70,13 @@ public class ExpectedExpenseServiceImpl extends ServiceImpl<ExpectedExpenseMappe
             
         if (expectedExpenseBo.getStatus() != null)
             queryWrapper.eq("status", expectedExpenseBo.getStatus());
-        if (expectedExpenseBo.getCreateTime() != null)
-            queryWrapper.eq("create_time", expectedExpenseBo.getCreateTime());
-            
+        // 匹配创建时间的年和月
+        if (expectedExpenseBo.getYear() != null && expectedExpenseBo.getMonth() != null) {
+            // 使用 DATE_FORMAT 精确匹配指定年月
+            queryWrapper.apply("DATE_FORMAT(create_time, '%Y-%m') = CONCAT({0}, '-', LPAD({1}, 2, '0'))",
+                    expectedExpenseBo.getYear(),
+                    expectedExpenseBo.getMonth());
+        }
         if (expectedExpenseBo.getUpdateTime() != null)
             queryWrapper.eq("update_time", expectedExpenseBo.getUpdateTime());
             
@@ -141,7 +145,6 @@ public class ExpectedExpenseServiceImpl extends ServiceImpl<ExpectedExpenseMappe
                 
                 // 设置分类图标
                 setCategoryIcon(expectedExpenseVo, expectedExpense);
-                
                 expectedExpenseVos.add(expectedExpenseVo);
             }
             return expectedExpenseVos;

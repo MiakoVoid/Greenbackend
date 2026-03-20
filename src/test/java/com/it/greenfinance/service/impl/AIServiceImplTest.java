@@ -4,10 +4,12 @@ import com.it.greenfinance.mapper.BillMapper;
 import com.it.greenfinance.mapper.CategoryKeywordMapper;
 import com.it.greenfinance.mapper.CategoryMapper;
 import com.it.greenfinance.mapper.SubCategoryMapper;
+import com.it.greenfinance.mapper.SystemConfigMapper;
 import com.it.greenfinance.pojo.Category;
 import com.it.greenfinance.pojo.CategoryKeyword;
-import com.it.greenfinance.pojo.SubCategory;
 import com.it.greenfinance.pojo.bo.BillBo;
+import com.it.greenfinance.pojo.vo.BillVo;
+import com.it.greenfinance.pojo.vo.OcrBillParseResultVo;
 import com.it.greenfinance.service.BillService;
 import com.it.greenfinance.service.ExpectedExpenseService;
 import com.it.utils.QwenUtil;
@@ -18,11 +20,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.mockito.stubbing.Answer;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -46,6 +46,8 @@ class AIServiceImplTest {
     @Mock
     private QwenUtil qwenUtil;
     @Mock
+    private SystemConfigMapper systemConfigMapper;
+    @Mock
     private BillService billService;
     @Mock
     private ExpectedExpenseService expectedExpenseService;
@@ -63,6 +65,10 @@ class AIServiceImplTest {
         cat.setId(1L);
         cat.setName("餐饮");
         mockCategories.add(cat);
+        lenient().when(systemConfigMapper.getConfigValue(any(), any())).thenReturn("0");
+        BillVo billVo = new BillVo();
+        billVo.setId(1L);
+        lenient().when(billService.createBill(any(BillBo.class))).thenReturn(billVo);
     }
 
     @Test
@@ -299,5 +305,42 @@ class AIServiceImplTest {
         LocalDateTime actual = LocalDateTime.ofInstant(billDate.toInstant(), ZoneId.systemDefault());
         
         assertEquals(expected.getDayOfYear(), actual.getDayOfYear());
+    }
+
+    @Test
+    void processRawOcrText_ShouldNormalizeFields() {
+        Long userId = 1L;
+        String rawText = "微信支付 金额-12.3 2026-03-22 14:30:00";
+        when(qwenUtil.parseRawOcrBillText(any())).thenReturn("{\"isBillScene\":true,\"sceneConfidence\":99,\"bills\":[{\"merchantName\":\"喜茶\",\"amount\":\"-12.3\",\"consumeTime\":\"2026-03-22 14:30:00\",\"billType\":\"退款\",\"paymentMethod\":\"微信支付\",\"orderNumber\":\"A001\"}]}");
+
+        OcrBillParseResultVo result = aiService.processRawOcrText(userId, rawText);
+
+        assertTrue(result.getBillScene());
+        assertEquals(99, result.getSceneConfidence());
+        assertEquals(1, result.getBills().size());
+        assertEquals("-12.30", result.getBills().get(0).getAmount().toPlainString());
+        assertEquals(1, result.getBills().get(0).getType());
+        assertNotNull(result.getBills().get(0).getBillTime());
+    }
+
+    @Test
+    void processRawOcrText_WhenTooLong_ShouldThrow4001() {
+        Long userId = 2L;
+        StringBuilder textBuilder = new StringBuilder();
+        for (int i = 0; i < 21000; i++) {
+            textBuilder.append("a");
+        }
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+                aiService.processRawOcrText(userId, textBuilder.toString()));
+        assertTrue(exception.getMessage().startsWith("[4001]"));
+    }
+
+    @Test
+    void processRawOcrText_WhenAiResultInvalid_ShouldThrow5001() {
+        Long userId = 3L;
+        when(qwenUtil.parseRawOcrBillText(any())).thenReturn("not-json");
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+                aiService.processRawOcrText(userId, "测试文本"));
+        assertTrue(exception.getMessage().startsWith("[5001]"));
     }
 }

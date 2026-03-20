@@ -10,6 +10,7 @@ DATABASE:
   PASSWORD: root
   PORT: 3306
 
+
 # 要自动生成代码的表名
 TABLE:
   -"bill"

@@ -1,6 +1,7 @@
 package com.it.greenfinance.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.injector.methods.DeleteById;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.it.greenfinance.mapper.CategoryKeywordMapper;
@@ -47,10 +48,7 @@ public class CategoryKeywordServiceImpl extends ServiceImpl<CategoryKeywordMappe
         
         // 设置默认值
         if (categoryKeyword.getWeight() == null) {
-            categoryKeyword.setWeight(50); // 默认权重为50
-        }
-        if (categoryKeyword.getStatus() == null) {
-            categoryKeyword.setStatus(1); // 默认启用状态
+            categoryKeyword.setWeight(50); // 默认权重为 50
         }
         
         save(categoryKeyword);
@@ -95,7 +93,7 @@ public class CategoryKeywordServiceImpl extends ServiceImpl<CategoryKeywordMappe
     }
     
     @Override
-    public boolean removeById(Long id) {
+    public boolean delete(Long id) {
         Long userId = userContextUtil.getCurrentUserId();
         if (userId == null) {
             throw new IllegalArgumentException("请先登录后再删除关键词");
@@ -111,9 +109,7 @@ public class CategoryKeywordServiceImpl extends ServiceImpl<CategoryKeywordMappe
             return false;
         }
         
-        // 软删除：将状态设置为禁用
-        categoryKeyword.setStatus(0);
-        return updateById(categoryKeyword);
+        return removeById(id);
     }
     
     @Override
@@ -127,8 +123,7 @@ public class CategoryKeywordServiceImpl extends ServiceImpl<CategoryKeywordMappe
     public CategoryKeywordVo findByExactKeyword(String keyword) {
         Long userId = userContextUtil.getCurrentUserId();
         CategoryKeyword categoryKeyword = baseMapper.findByExactKeyword(keyword, userId);
-        // 只返回启用状态的关键词
-        if (categoryKeyword != null && categoryKeyword.getStatus() == 1) {
+        if (categoryKeyword != null) {
             return convertToVo(categoryKeyword);
         }
         return null;
@@ -192,11 +187,6 @@ public class CategoryKeywordServiceImpl extends ServiceImpl<CategoryKeywordMappe
         // 如果匹配类型不为空，则添加匹配类型相等条件
         if (bo.getType() != null) {
             queryWrapper.eq("type", bo.getType());
-        }
-        
-        // 如果状态不为空，则添加状态相等条件
-        if (bo.getStatus() != null) {
-            queryWrapper.eq("status", bo.getStatus());
         }
         
         // 按创建时间倒序排列结果

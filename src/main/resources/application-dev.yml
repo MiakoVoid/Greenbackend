@@ -28,7 +28,9 @@ crypto:
 
 ai:
   model-enabled: true
-  model-api-url: https://api-inference.modelscope.cn/v1/chat/completions
-  model-api-key: ms-bfcc689c-652f-4df4-b26b-a9dfaf846b85
+  model-api-url: https://api-inference.modelscope.cn/v1
+  model-api-key: ms-7a402fbb-d82a-418b-816f-2b08a510eecb
+  model-id: Qwen/Qwen3-4B
+  stream-enabled: true
   ocr-enabled: true
   advice-enabled: true

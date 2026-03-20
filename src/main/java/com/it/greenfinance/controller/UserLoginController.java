@@ -56,4 +56,29 @@ public class UserLoginController {
     public Result logout() {
         return userService.logout();
     }
+    
+    /**
+     * 修改密码
+     *
+     * @param oldPassword 旧密码
+     * @param newPassword 新密码
+     * @return 修改结果
+     */
+    @PostMapping("/change-password")
+    public Result changePassword(
+            @RequestParam String oldPassword,
+            @RequestParam String newPassword) {
+        return userService.changePassword(oldPassword, newPassword);
+    }
+    
+    /**
+     * 注销账户（立即注销）
+     *
+     * @return 注销结果
+     */
+    @PostMapping("/deactivate")
+    public Result deactivateAccount() {
+        return userService.deactivateAccount();
+    }
+    
 }

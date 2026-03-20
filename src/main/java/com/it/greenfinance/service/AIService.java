@@ -2,6 +2,7 @@ package com.it.greenfinance.service;
 
 import com.it.greenfinance.pojo.vo.AnalyzedTransactionVo;
 import com.it.greenfinance.pojo.vo.FinancialAdviceVo;
+import com.it.greenfinance.pojo.vo.OcrBillParseResultVo;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Date;
@@ -22,15 +23,16 @@ public interface AIService {
     List<Object> processText(Long userId, String text, String billTime);
 
     /**
-     * 2. OCR Accounting Interface (Batch)
-     * Process a list of text segments recognized from images AND create transactions.
+     * 2. OCR 批量记账接口
+     * 处理 OCR 识别出的文本列表，解析为交易信息
      *
-     * @param userId Current user ID
-     * @param ocrTexts List of text segments from OCR
-     * @return List of created transaction objects (BillVo or ExpectedExpenseVo)
+     * @param userId 用户 ID
+     * @param ocrTexts OCR 文本列表
+     * @param autoCreate 是否自动创建账单，true-自动创建，false-仅返回解析结果
+     * @return OCR账单解析结构化结果
      */
     @Transactional(rollbackFor = Exception.class)
-    List<Object> processOcrTexts(Long userId, List<String> ocrTexts);
+    OcrBillParseResultVo processOcrTexts(Long userId, List<String> ocrTexts, boolean autoCreate);
 
     /**
      * 3. Financial Advice Interface

@@ -101,7 +101,7 @@ public class CategoryKeywordController {
      */
     @DeleteMapping("/{id}")
     public Result delete(@PathVariable Long id) {
-        boolean deleted = categoryKeywordService.removeById(id);
+        boolean deleted = categoryKeywordService.delete(id);
         if (deleted) {
             return Result.ok("分类关键词删除成功");
         } else {

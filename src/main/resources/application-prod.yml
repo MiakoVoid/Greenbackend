@@ -33,5 +33,7 @@ ai:
   model-enabled: ${AI_MODEL_ENABLED:true}
   model-api-url: ${AI_MODEL_API_URL}
   model-api-key: ${AI_API_KEY}
+  model-id: ${AI_MODEL_ID:Qwen/Qwen3-4B}
+  stream-enabled: ${AI_STREAM_ENABLED:false}
   ocr-enabled: ${AI_OCR_ENABLED:true}
   advice-enabled: ${AI_ADVICE_ENABLED:true}

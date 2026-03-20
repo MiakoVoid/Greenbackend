@@ -4,6 +4,7 @@ import com.it.greenfinance.mapper.BillMapper;
 import com.it.greenfinance.mapper.CategoryKeywordMapper;
 import com.it.greenfinance.mapper.CategoryMapper;
 import com.it.greenfinance.mapper.SubCategoryMapper;
+import com.it.greenfinance.mapper.SystemConfigMapper;
 import com.it.greenfinance.pojo.Category;
 import com.it.greenfinance.pojo.SubCategory;
 import com.it.greenfinance.service.BillService;
@@ -39,6 +40,8 @@ public class AIServiceBenchmarkTest {
     @Mock
     private QwenUtil qwenUtil;
     @Mock
+    private SystemConfigMapper systemConfigMapper;
+    @Mock
     private BillService billService;
     @Mock
     private ExpectedExpenseService expectedExpenseService;
@@ -47,7 +50,7 @@ public class AIServiceBenchmarkTest {
 
     @BeforeEach
     void setUp() {
-        aiService = new AIServiceImpl(categoryKeywordMapper, categoryMapper, subCategoryMapper, billMapper, qwenUtil, billService, expectedExpenseService);
+        aiService = new AIServiceImpl(categoryKeywordMapper, systemConfigMapper, categoryMapper, subCategoryMapper, billMapper, qwenUtil, billService, expectedExpenseService);
         
         // Mock data
         List<Category> categories = new ArrayList<>();
@@ -55,6 +58,7 @@ public class AIServiceBenchmarkTest {
         categories.add(c1);
         when(categoryMapper.selectList(any())).thenReturn(categories);
         when(subCategoryMapper.selectList(any())).thenReturn(Collections.emptyList());
+        when(systemConfigMapper.getConfigValue(any(), any())).thenReturn("0");
         // Ensure keyword mapper returns empty list instead of null
         when(categoryKeywordMapper.selectList(any())).thenReturn(Collections.emptyList());
     }
