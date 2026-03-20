@@ -50,10 +50,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     private static final String SUCCESS_REGISTER = "注册成功";
     private static final String SUCCESS_LOGOUT = "登出成功";
     private static final String SUCCESS_AVATAR_UPDATE = "头像更新成功";
-    private static final String SUCCESS_DEACTIVATION_REQUEST = "账户注销申请已提交，7天内可重新登录取消注销";
+    private static final String SUCCESS_DEACTIVATION_REQUEST = "账户注销申请已提交，7 天内可重新登录取消注销";
     private static final String ERROR_DEACTIVATION_FAILED = "注销申请提交失败";
     private static final String ERROR_USER_NOT_FOUND = "用户不存在";
     private static final String SUCCESS_DEACTIVATION_CANCEL = "注销申请已取消";
+    private static final String SUCCESS_PASSWORD_CHANGED = "密码修改成功";
+    private static final String ERROR_WRONG_PASSWORD = "原密码错误";
+    private static final String SUCCESS_ACCOUNT_DEACTIVATED = "账户已注销";
     
     
     @Override
@@ -196,30 +199,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (userBo.getAvatarPath() != null) {
             user.setAvatarPath(userBo.getAvatarPath());
         }
-        
+        if (userBo.getUsername()!=null){
+            user.setUsername(userBo.getUsername());
+        }
         user.setUpdateTime(new Date());
         updateById(user);
         return convertToVo(user);
     }
     
-    @Override
-    public Result updateAvatar(String avatarPath) {
-        Long userId = userContextUtil.getCurrentUserId();
-        User user = getById(userId);
-        
-        if (user == null) {
-            return Result.error(404, ERROR_USER_NOT_FOUND);
-        }
-        
-        user.setAvatarPath(avatarPath);
-        user.setUpdateTime(new Date());
-        updateById(user);
-        
-        Map<String, String> data = new HashMap<>();
-        data.put("avatarPath", avatarPath);
-        
-        return Result.ok(SUCCESS_AVATAR_UPDATE, data);
-    }
+  
     
     @Override
     public Result requestDeactivation(Long userId) {
@@ -258,6 +246,79 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             return Result.ok(SUCCESS_DEACTIVATION_CANCEL, null);
         } else {
             return Result.error(500, "取消注销申请失败");
+        }
+    }
+    
+    @Override
+    public Result changePassword(String oldPassword, String newPassword) {
+        // 获取当前用户 ID
+        Long userId = userContextUtil.getCurrentUserId();
+        if (userId == null) {
+            return Result.error(401, "用户未登录");
+        }
+        
+        // 获取用户信息
+        User user = getById(userId);
+        if (user == null) {
+            return Result.error(404, ERROR_USER_NOT_FOUND);
+        }
+        
+        // 验证旧密码
+        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
+            return Result.error(400, ERROR_WRONG_PASSWORD);
+        }
+        
+        // 验证新密码格式
+        if (newPassword == null || newPassword.length() < 6) {
+            return Result.error(400, ERROR_PASSWORD_TOO_SHORT);
+        }
+        
+        if (!isValidPassword(newPassword)) {
+            return Result.error(400, ERROR_PASSWORD_COMPLEXITY);
+        }
+        
+        // 更新密码
+        user.setPassword(passwordEncoder.encode(newPassword));
+        user.setUpdateTime(new Date());
+        boolean success = updateById(user);
+        
+        if (success) {
+            return Result.ok(SUCCESS_PASSWORD_CHANGED, null);
+        } else {
+            return Result.error(500, "密码修改失败");
+        }
+    }
+    
+    @Override
+    public Result deactivateAccount() {
+        // 获取当前用户 ID
+        Long userId = userContextUtil.getCurrentUserId();
+        if (userId == null) {
+            return Result.error(401, "用户未登录");
+        }
+        
+        // 获取用户信息
+        User user = getById(userId);
+        if (user == null) {
+            return Result.error(404, ERROR_USER_NOT_FOUND);
+        }
+        
+        // 设置注销状态为已注销（2）
+        user.setDeletionStatus(2); // 已注销
+        user.setDeletionTime(new Date()); // 设置注销时间
+        user.setStatus(0); // 禁用用户
+        user.setUpdateTime(new Date());
+        boolean success = updateById(user);
+        
+        if (success) {
+            // 使当前 token 失效
+            String token = userContextUtil.getCurrentToken();
+            if (token != null && !token.isEmpty()) {
+                jwtUtil.invalidateToken(token);
+            }
+            return Result.ok(SUCCESS_ACCOUNT_DEACTIVATED, null);
+        } else {
+            return Result.error(500, "账户注销失败");
         }
     }
     

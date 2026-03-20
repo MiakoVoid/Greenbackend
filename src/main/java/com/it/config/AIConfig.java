@@ -23,7 +23,12 @@ public class AIConfig {
     /**
      * AI模型API密钥
      */
+    
     private String modelApiKey;  // 移除了错误的@Priority注解
+
+    private String modelId;
+
+    private Boolean streamEnabled = Boolean.FALSE;
     
     /**
      * 是否启用AI模型（默认false，使用HanLP作为兜底方案）

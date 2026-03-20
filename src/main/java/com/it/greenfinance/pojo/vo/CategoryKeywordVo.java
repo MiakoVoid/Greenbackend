@@ -59,15 +59,10 @@ public class CategoryKeywordVo implements Serializable {
     private Long subCategoryId;
 
     /**
-     * 匹配权重（1-100，越高优先级越高，解决关键词冲突）
+     * 匹配权重 (1-100,越高优先级越高，解决关键词冲突)
      */
     private Integer weight;
-
-    /**
-     * 状态：1=启用，0=禁用（软删除，避免误删恢复麻烦）
-     */
-    private Integer status;
-
+    
     /**
      * 创建时间
      */

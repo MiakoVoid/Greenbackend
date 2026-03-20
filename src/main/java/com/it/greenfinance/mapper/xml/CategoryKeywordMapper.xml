@@ -7,7 +7,7 @@
         SELECT * FROM category_keyword 
         WHERE (user_id = #{userId} OR user_id = 0) 
         AND keyword LIKE CONCAT('%', #{keyword}, '%')
-        ORDER BY user_id ASC, weight DESC, create_time DESC
+        ORDER BY weight DESC, create_time DESC
     </select>
     
     <!-- 根据关键词精确查找匹配的分类关键词 -->
@@ -15,33 +15,32 @@
         SELECT * FROM category_keyword 
         WHERE (user_id = #{userId} OR user_id = 0) 
         AND keyword = #{keyword}
-        ORDER BY user_id ASC, weight DESC, create_time DESC
+        ORDER BY weight DESC, create_time DESC
         LIMIT 1
     </select>
     
-    <!-- 根据关键词查找启用状态的分类关键词列表（按权重排序） -->
+    <!-- 根据关键词查找分类关键词列表（按权重排序） -->
     <select id="findActiveByKeywordOrderByWeight" resultType="com.it.greenfinance.pojo.CategoryKeyword">
         SELECT * FROM category_keyword 
         WHERE (user_id = #{userId} OR user_id = 0) 
         AND keyword LIKE CONCAT('%', #{keyword}, '%')
-        AND status = 1
-        ORDER BY user_id ASC, weight DESC, create_time DESC
+        ORDER BY weight DESC, create_time DESC
     </select>
     
-    <!-- 获取所有启用的商户名关键词（按权重&创建时间排序，避免 DISTINCT+ORDER BY 兼容性问题） -->
+    <!-- 获取所有商户名关键词（按权重&创建时间排序，避免 DISTINCT+ORDER BY 兼容性问题） -->
     <select id="findAllActiveMerchants" resultType="java.lang.String">
         SELECT keyword
         FROM category_keyword
-        WHERE status = 1 AND type = 3
+        WHERE type = 3
         GROUP BY keyword
         ORDER BY MAX(weight) DESC, MAX(create_time) DESC
     </select>
     
-    <!-- 获取所有启用的分类关键词（按权重&创建时间排序，避免 DISTINCT+ORDER BY 兼容性问题） -->
+    <!-- 获取所有分类关键词（按权重&创建时间排序，避免 DISTINCT+ORDER BY 兼容性问题） -->
     <select id="findAllActiveCategoryKeywords" resultType="java.lang.String">
         SELECT keyword
         FROM category_keyword
-        WHERE status = 1 AND (type = 1 OR type = 2)
+        WHERE (type = 1 OR type = 2)
         GROUP BY keyword
         ORDER BY MAX(weight) DESC, MAX(create_time) DESC
     </select>

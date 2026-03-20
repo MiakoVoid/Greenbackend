@@ -62,14 +62,12 @@ CREATE TABLE `category_keyword` (
                                     `category_id` bigint DEFAULT NULL COMMENT '主分类ID（关联category表，type=1/2时必填）',
                                     `sub_category_id` bigint DEFAULT NULL COMMENT '子分类ID（关联sub_category表，type=2时必填，type=1/3时可为NULL）',
                                     `weight` int NOT NULL DEFAULT 50 COMMENT '匹配权重（1-100，越高优先级越高，解决关键词冲突）',
-                                    `status` tinyint NOT NULL DEFAULT 1 COMMENT '状态：1=启用，0=禁用（软删除，避免误删恢复麻烦）',
                                     `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间（自动填充）',
                                     `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间（自动更新）',
                                     PRIMARY KEY (`id`),
                                     UNIQUE KEY `uk_user_keyword_type` (`user_id`,`keyword`,`type`) COMMENT '唯一约束：同一用户下，相同关键词+类型不能重复',
                                     KEY `idx_user_type` (`user_id`,`type`) COMMENT '按“用户+类型”查询关键词（如查询用户自定义的商户名关键词）',
-                                    KEY `idx_category` (`category_id`,`sub_category_id`) COMMENT '按“主分类+子分类”查询关键词（用于分类维度统计）',
-                                    KEY `idx_keyword_status` (`keyword`,`status`) COMMENT '关键词匹配时快速查询（过滤禁用关键词）'
+                                    KEY `idx_category` (`category_id`,`sub_category_id`) COMMENT '按“主分类+子分类”查询关键词（用于分类维度统计）'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='分类关键词表（存储主分类、子分类、商户名的匹配关键词，支持系统默认和用户自定义）';
 
 -- 5. 账单表（不变，无图片存储）

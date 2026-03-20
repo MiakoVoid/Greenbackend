@@ -206,8 +206,7 @@ public class AIServiceImpl implements AIService {
         for (int i = 0; i < tokenList.size(); i += batchSize) {
             List<String> batch = tokenList.subList(i, Math.min(i + batchSize, tokenList.size()));
             QueryWrapper<CategoryKeyword> query = new QueryWrapper<>();
-            query.in("keyword", batch)
-                 .eq("status", 1);
+            query.in("keyword", batch);
             keywords.addAll(categoryKeywordMapper.selectList(query));
         }
 
@@ -221,10 +220,10 @@ public class AIServiceImpl implements AIService {
 
 
     /**
-     * 处理OCR识别后的文本列表，并自动创建交易
+     * 处理 OCR 识别后的文本列表，并自动创建交易
      * 
-     * @param userId 用户ID
-     * @param ocrTexts OCR识别出的文本行列表
+     * @param userId 用户 ID
+     * @param ocrTexts OCR 识别出的文本行列表
      * @return 创建后的交易对象列表
      */
     @Override
@@ -233,21 +232,36 @@ public class AIServiceImpl implements AIService {
         if (ocrTexts == null || ocrTexts.isEmpty()) {
             return new ArrayList<>();
         }
-
-        // 预加载分类数据
+    
+        // 1. OCR 文本预处理和聚合
+        List<String> processedTexts = preprocessAndAggregateOcrTexts(ocrTexts);
+        if (processedTexts.isEmpty()) {
+            log.warn("OCR 文本预处理后无有效内容");
+            return new ArrayList<>();
+        }
+    
+        // 2. 预加载分类数据（带缓存优化）
         List<Category> categories = categoryMapper.selectList(null);
         List<SubCategory> subCategories = subCategoryMapper.selectList(null);
-
-        // 预加载关键词
-        Map<String, CategoryKeyword> keywordMap = preloadKeywords(ocrTexts);
-
-        // 并行处理每行OCR文本
-        List<AnalyzedTransactionVo> analyzedTransactions = ocrTexts.parallelStream()
+    
+        // 3. 预加载关键词
+        Map<String, CategoryKeyword> keywordMap = preloadKeywords(processedTexts);
+    
+        // 4. 并行处理每段 OCR 文本
+        List<AnalyzedTransactionVo> analyzedTransactions = processedTexts.parallelStream()
                 .filter(text -> StringUtils.hasText(text.trim()))
-                .map(text -> processSegment(text.trim(), categories, subCategories, null, keywordMap))
+                .map(text -> {
+                    try {
+                        return processSegment(text.trim(), categories, subCategories, null, keywordMap);
+                    } catch (Exception e) {
+                        log.error("处理 OCR 文本片段失败：{}", text, e);
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
                 .collect(Collectors.toList());
-        
-        // 自动创建交易
+            
+        // 5. 自动创建交易
         return batchCreateTransactions(userId, analyzedTransactions);
     }
 
@@ -358,6 +372,215 @@ public class AIServiceImpl implements AIService {
     }
 
     /**
+     * OCR 文本预处理和聚合
+     * 功能：
+     * 1. 去除噪声（乱码、特殊符号、无意义字符）
+     * 2. 合并相关行（同一账单的多行信息）
+     * 3. 去重（重复识别的文本）
+     * 4. 提取关键信息块
+     * 
+     * @param ocrTexts 原始 OCR 文本列表
+     * @return 预处理后的文本列表
+     */
+    private List<String> preprocessAndAggregateOcrTexts(List<String> ocrTexts) {
+        // 1. 过滤和清洗每行文本
+        List<String> cleanedLines = ocrTexts.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(line -> !line.isEmpty())
+                .map(this::cleanOcrLine)
+                .filter(line -> !line.isEmpty())
+                .collect(Collectors.toList());
+            
+        if (cleanedLines.isEmpty()) {
+            return new ArrayList<>();
+        }
+            
+        // 2. 检测并合并同一账单的多行信息
+        List<String> aggregatedTexts = aggregateBillLines(cleanedLines);
+            
+        // 3. 去重（移除相似度极高的文本）
+        return removeDuplicates(aggregatedTexts);
+    }
+        
+    /**
+     * 清洗单行 OCR 文本
+     * 去除乱码、特殊符号、无意义字符
+     * 
+     * @param line 原始文本行
+     * @return 清洗后的文本
+     */
+    private String cleanOcrLine(String line) {
+        if (line == null || line.isEmpty()) {
+            return "";
+        }
+            
+        // 1. 去除常见 OCR 噪声字符
+        String cleaned = line.replaceAll("[\\x00-\\x1F\\x7F]", ""); // 控制字符
+        cleaned = cleaned.replaceAll("[\u3000\u200B\uFEFF]+", ""); // 零宽字符和全角空格
+            
+        // 2. 修正常见 OCR 错误
+        cleaned = cleaned.replaceAll("[0oO]", "0"); // 数字 0 的混淆（在金额中）
+        cleaned = cleaned.replaceAll("[lIi]|", "1"); // 数字 1 的混淆（在金额中）
+            
+        // 3. 合并多余空格
+        cleaned = cleaned.replaceAll("\\s+", " ").trim();
+            
+        // 4. 去除过长重复字符（如 "啊啊啊" → "啊"）
+        cleaned = cleaned.replaceAll("(.)\\1{2,}", "$1");
+            
+        return cleaned;
+    }
+        
+    /**
+     * 合并同一账单的多行信息
+     * 根据关键词（商户名、金额、时间）将相关的行合并
+     * 
+     * @param lines 清洗后的文本行
+     * @return 合并后的文本块列表
+     */
+    private List<String> aggregateBillLines(List<String> lines) {
+        List<String> result = new ArrayList<>();
+        StringBuilder currentBlock = new StringBuilder();
+            
+        for (String line : lines) {
+            // 检测是否为新账单的开始
+            boolean isNewBill = isBillStart(line);
+                
+            if (isNewBill && currentBlock.length() > 0) {
+                // 保存当前的账单块
+                result.add(currentBlock.toString().trim());
+                currentBlock = new StringBuilder();
+            }
+                
+            // 添加到当前块
+            if (currentBlock.length() > 0) {
+                currentBlock.append(" ");
+            }
+            currentBlock.append(line);
+        }
+            
+        // 添加最后一个块
+        if (currentBlock.length() > 0) {
+            result.add(currentBlock.toString().trim());
+        }
+            
+        return result;
+    }
+        
+    /**
+     * 判断是否为账单开始行
+     * 通常包含商户名、支付平台等关键信息
+     * 
+     * @param line 文本行
+     * @return 是否为账单开始
+     */
+    private boolean isBillStart(String line) {
+        // 匹配常见支付平台标识
+        String[] billStartPatterns = {
+            ".*(微信 | 支付宝|银联|云闪付).*(收款 | 付款|支付|交易).*",
+            ".*(喜茶 | 肯德基 | 麦当劳 | 星巴克|瑞幸|古茗|蜜雪冰城).*",
+            ".*(超市 | 便利店 | 商场 | 餐厅|酒店|电影).*",
+            ".*金额.*[0-9].*",
+            ".*收款方.*",
+            ".*商户.*"
+        };
+            
+        for (String pattern : billStartPatterns) {
+            if (line.matches(pattern)) {
+                return true;
+            }
+        }
+            
+        return false;
+    }
+        
+    /**
+     * 去除重复或高度相似的文本
+     * 
+     * @param texts 文本列表
+     * @return 去重后的文本列表
+     */
+    private List<String> removeDuplicates(List<String> texts) {
+        List<String> result = new ArrayList<>();
+            
+        for (String text : texts) {
+            boolean isDuplicate = false;
+                
+            // 检查是否与已有文本高度相似
+            for (String existing : result) {
+                if (isSimilar(text, existing)) {
+                    isDuplicate = true;
+                    break;
+                }
+            }
+                
+            if (!isDuplicate) {
+                result.add(text);
+            }
+        }
+            
+        return result;
+    }
+        
+    /**
+     * 判断两个文本是否相似
+     * 使用简单的编辑距离算法
+     * 
+     * @param text1 文本 1
+     * @param text2 文本 2
+     * @return 是否相似
+     */
+    private boolean isSimilar(String text1, String text2) {
+        if (text1.equals(text2)) {
+            return true;
+        }
+            
+        // 如果长度差异过大，直接返回 false
+        int lengthDiff = Math.abs(text1.length() - text2.length());
+        if (lengthDiff > 5) {
+            return false;
+        }
+            
+        // 计算编辑距离
+        int distance = calculateLevenshteinDistance(text1, text2);
+            
+        // 相似度阈值：编辑距离小于较短文本长度的 30%
+        double threshold = Math.min(text1.length(), text2.length()) * 0.3;
+        return distance <= threshold;
+    }
+        
+    /**
+     * 计算两个字符串的编辑距离（Levenshtein Distance）
+     * 
+     * @param s1 字符串 1
+     * @param s2 字符串 2
+     * @return 编辑距离
+     */
+    private int calculateLevenshteinDistance(String s1, String s2) {
+        int[][] dp = new int[s1.length() + 1][s2.length() + 1];
+            
+        for (int i = 0; i <= s1.length(); i++) {
+            dp[i][0] = i;
+        }
+        for (int j = 0; j <= s2.length(); j++) {
+            dp[0][j] = j;
+        }
+            
+        for (int i = 1; i <= s1.length(); i++) {
+            for (int j = 1; j <= s2.length(); j++) {
+                int cost = (s1.charAt(i - 1) == s2.charAt(j - 1)) ? 0 : 1;
+                dp[i][j] = Math.min(Math.min(
+                        dp[i - 1][j] + 1,      // 删除
+                        dp[i][j - 1] + 1),     // 插入
+                        dp[i - 1][j - 1] + cost); // 替换
+            }
+        }
+            
+        return dp[s1.length()][s2.length()];
+    }
+    
+    /**
      * 处理单个文本片段，提取交易信息
      * 
      * @param segment 文本片段
@@ -365,7 +588,7 @@ public class AIServiceImpl implements AIService {
      * @param subCategories 子分类列表
      * @param forcedTime 强制指定的时间（若非空，则直接使用）
      * @param keywordMap 预加载的关键词映射
-     * @return 解析后的交易记录VO
+     * @return 解析后的交易记录 VO
      */
     private AnalyzedTransactionVo processSegment(String segment, List<Category> categories, List<SubCategory> subCategories, LocalDateTime forcedTime, Map<String, CategoryKeyword> keywordMap) {
         AnalyzedTransactionVo tx = new AnalyzedTransactionVo();
@@ -682,20 +905,21 @@ public class AIServiceImpl implements AIService {
         // 1. 基于预加载的关键词映射进行匹配
         List<Term> terms = HanLP.segment(description);
         List<String> tokens = terms.stream().map(t -> t.word).collect(Collectors.toList());
-
+        
         if (!tokens.isEmpty()) {
-            // 在Map中查找匹配的关键词
+            // 在 Map 中查找匹配的关键词
             List<CategoryKeyword> matches = tokens.stream()
                 .map(keywordMap::get)
                 .filter(Objects::nonNull)
                 .sorted(Comparator.comparingInt(CategoryKeyword::getWeight).reversed())
                 .collect(Collectors.toList());
-            
+                    
             // 如果找到匹配关键词，使用该关键词对应的分类
             if (!matches.isEmpty()) {
                 CategoryKeyword match = matches.get(0);
                 fillCategoryInfo(tx, match, categories, subCategories);
                 tx.setSource("KEYWORD_DB");
+                log.debug("关键词匹配：{} -> {}({})", description, tx.getCategoryName(), tx.getSource());
                 return;
             }
         }
@@ -705,13 +929,14 @@ public class AIServiceImpl implements AIService {
         categories.forEach(c -> categoryNames.add(c.getName()));
         subCategories.forEach(sc -> categoryNames.add(sc.getName()));
         
-        Optional<String> directMatch = categoryNames.stream()
-                .filter(name -> description.contains(name) || name.contains(description))
+        // 2. 优先匹配子分类（更精确）
+        Optional<String> subCategoryMatch = subCategories.stream()
+                .map(SubCategory::getName)
+                .filter(name -> description.contains(name))
                 .findFirst();
-        //2. 基于直接匹配进行分类
-        if (directMatch.isPresent()) {
-            String matchedName = directMatch.get();
-            // 查找匹配的子分类
+        
+        if (subCategoryMatch.isPresent()) {
+            String matchedName = subCategoryMatch.get();
             Optional<SubCategory> subMatch = subCategories.stream()
                     .filter(sc -> sc.getName().equals(matchedName)).findFirst();
             if (subMatch.isPresent()) {
@@ -720,43 +945,55 @@ public class AIServiceImpl implements AIService {
                 tx.setCategoryId(subMatch.get().getCategoryId());
                 categories.stream().filter(c -> c.getId().equals(subMatch.get().getCategoryId()))
                         .findFirst().ifPresent(c -> tx.setCategoryName(c.getName()));
-                tx.setSource("DIRECT_MATCH");
+                tx.setSource("DIRECT_MATCH_SUB");
+                log.debug("直接匹配子分类：{} -> {}({})", description, tx.getSubCategoryName(), tx.getSource());
                 return;
             }
-            
-            // 查找匹配的主分类
+        }
+        
+        // 3. 其次匹配主分类
+        Optional<String> categoryMatch = categories.stream()
+                .map(Category::getName)
+                .filter(name -> !"其他".equals(name) && description.contains(name))
+                .findFirst();
+        
+        if (categoryMatch.isPresent()) {
+            String matchedName = categoryMatch.get();
             Optional<Category> catMatch = categories.stream()
                     .filter(c -> c.getName().equals(matchedName)).findFirst();
             if (catMatch.isPresent()) {
                 tx.setCategoryId(catMatch.get().getId());
                 tx.setCategoryName(catMatch.get().getName());
                 tx.setSource("DIRECT_MATCH");
+                log.debug("直接匹配主分类：{} -> {}({})", description, tx.getCategoryName(), tx.getSource());
                 return;
             }
         }
-        // 3. 使用AI进行分类
+        // 4. 使用 AI 智能分类
         try {
             
-            // 调用AI进行分类并提取时间
+            // 调用 AI 进行分类并提取时间
             JSONObject aiResultObj = qwenUtil.classifyWithTime(description, categoryNames);
             
             if (aiResultObj != null) {
                 String aiCategory = aiResultObj.getString("category");
                 String aiDate = aiResultObj.getString("date");
 
-                // 如果AI提取到了日期，且之前未解析出日期，则使用AI提取的日期
+                // 如果 AI 提取到了日期，且之前未解析出日期，则使用 AI 提取的日期
                 if (StringUtils.hasText(aiDate) && tx.getTransactionTime() == null) {
                     try {
                         LocalDate date = LocalDate.parse(aiDate);
                         tx.setTransactionTime(date.atStartOfDay());
+                        log.debug("AI 提取时间：{} -> {}", description, aiDate);
                     } catch (Exception e) {
                         log.warn("Failed to parse date from AI result: {}", aiDate);
                     }
                 }
 
                 if (StringUtils.hasText(aiCategory)) {
-                    // 查找匹配的子分类
-                    Optional<SubCategory> subMatch = subCategories.stream().filter(sc -> sc.getName().equals(aiCategory)).findFirst();
+                    // 优先查找匹配的子分类
+                    Optional<SubCategory> subMatch = subCategories.stream()
+                            .filter(sc -> sc.getName().equals(aiCategory)).findFirst();
                     if (subMatch.isPresent()) {
                         tx.setSubCategoryId(subMatch.get().getId());
                         tx.setSubCategoryName(subMatch.get().getName());
@@ -766,12 +1003,14 @@ public class AIServiceImpl implements AIService {
                         
                         // 保存新学到的关键词
                         saveNewKeyword(description, subMatch.get().getId(), subMatch.get().getCategoryId());
-                        tx.setSource("AI_QWEN");
+                        tx.setSource("AI_QWEN_SUB");
+                        log.info("AI 分类（子分类）：{} -> {}({})", description, tx.getSubCategoryName(), tx.getSource());
                         return;
                     }
                     
                     // 查找匹配的主分类
-                    Optional<Category> catMatch = categories.stream().filter(c -> c.getName().equals(aiCategory)).findFirst();
+                    Optional<Category> catMatch = categories.stream()
+                            .filter(c -> c.getName().equals(aiCategory)).findFirst();
                     if (catMatch.isPresent()) {
                         tx.setCategoryId(catMatch.get().getId());
                         tx.setCategoryName(catMatch.get().getName());
@@ -779,20 +1018,23 @@ public class AIServiceImpl implements AIService {
                         // 保存新学到的关键词
                         saveNewKeyword(description, null, catMatch.get().getId());
                         tx.setSource("AI_QWEN");
+                        log.info("AI 分类（主分类）：{} -> {}({})", description, tx.getCategoryName(), tx.getSource());
                         return;
                     }
                 }
             }
         } catch (Exception e) {
-            log.error("AI分类失败", e);
+            log.error("AI 分类失败：{}", description, e);
         }
 
-        // 3. 回退到默认分类"其他"
+        // 5. 回退到默认分类"其他"
         tx.setCategoryName("其他");
         tx.setSource("FALLBACK");
-        // 尝试查找"其他"分类ID
-        Optional<Category> otherCat = categories.stream().filter(c -> "其他".equals(c.getName())).findFirst();
+        // 尝试查找"其他"分类 ID
+        Optional<Category> otherCat = categories.stream()
+                .filter(c -> "其他".equals(c.getName())).findFirst();
         otherCat.ifPresent(category -> tx.setCategoryId(category.getId()));
+        log.warn("回退分类：{} -> 其他 (FALLBACK)", description);
     }
 
     /**
@@ -842,7 +1084,6 @@ public class AIServiceImpl implements AIService {
                     newKw.setType(subId != null ? 2 : 1); // 1为主分类，2为子分类
                     newKw.setMatchValue(keyword);
                     newKw.setWeight(10); // 默认权重
-                    newKw.setStatus(1); // 启用状态
                     newKw.setUserId(0L); // 系统用户
                     categoryKeywordMapper.insert(newKw);
                     log.info("学习到新关键词: {} -> 分类ID: {}", keyword, catId);

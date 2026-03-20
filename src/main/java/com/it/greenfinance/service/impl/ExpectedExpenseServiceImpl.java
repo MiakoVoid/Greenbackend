@@ -141,7 +141,6 @@ public class ExpectedExpenseServiceImpl extends ServiceImpl<ExpectedExpenseMappe
                 
                 // 设置分类图标
                 setCategoryIcon(expectedExpenseVo, expectedExpense);
-                
                 expectedExpenseVos.add(expectedExpenseVo);
             }
             return expectedExpenseVos;
