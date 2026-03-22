@@ -48,6 +48,7 @@ public class AIController {
             return Result.error(401, "请先登录");
         }
         List<Object> result = aiService.processText(userId, text, billTime);
+        System.out.println( result);
         return Result.ok(result);
     }
 

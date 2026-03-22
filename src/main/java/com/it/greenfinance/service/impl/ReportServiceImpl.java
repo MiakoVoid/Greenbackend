@@ -8,6 +8,7 @@ import com.it.greenfinance.service.ReportService;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -51,7 +52,7 @@ public class ReportServiceImpl implements ReportService {
                 
                 // 计算百分比
                 BigDecimal percentage = totalExpense.compareTo(BigDecimal.ZERO) == 0 ? BigDecimal.ZERO
-                        : amount.multiply(new BigDecimal("100")).divide(totalExpense, 2, BigDecimal.ROUND_HALF_UP);
+                        : amount.multiply(new BigDecimal("100")).divide(totalExpense, 2, RoundingMode.HALF_UP);
                 categoryExpenseVo.setPercentage(percentage.toString() + "%");
                 
                 categoryExpenseList.add(categoryExpenseVo);

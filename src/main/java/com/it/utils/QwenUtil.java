@@ -10,13 +10,13 @@ import com.it.greenfinance.service.CategoryService;
 import com.it.greenfinance.service.SystemConfigService;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.*;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.io.IOException;
 import java.util.Objects;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
@@ -76,6 +76,11 @@ public class QwenUtil {
      * Markdown 代码块标记正则表达式
      */
     private static final Pattern MARKDOWN_CODE_BLOCK_PATTERN = Pattern.compile("^```(json)?|```$");
+    
+    /**
+     * 解析 Markdown JSON 代码块的正则表达式
+     */
+    private static final Pattern JSON_BLOCK_PATTERN = Pattern.compile("(?s)```(?:json|JSON)?\\s*(.*?)\\s*```");
 
     /**
      * 构造函数，初始化 OkHttpClient 并设置超时时间
@@ -89,27 +94,6 @@ public class QwenUtil {
                 .retryOnConnectionFailure(true)        // 启用连接失败重试
                 .build();
     }
-
-    /**
-     * 文本分类方法（兼容旧接口，内部调用 classifyWithTime）
-     * 将输入的文本分类到指定的类别列表中的某一类
-     *
-     * @param text 待分类的文本描述
-     * @param categories 可选的类别列表
-     * @return 分类结果，即匹配的类别名称；如果 AI 功能未启用或发生错误则返回 null
-     */
-    public String classify(String text, List<String> categories) {
-        if (!StringUtils.hasText(text) || categories == null || categories.isEmpty()) {
-            log.warn("classify 输入参数无效：text={}, categories={}", text, categories);
-            return null;
-        }
-            
-        JSONObject result = classifyWithTime(text, categories);
-        if (result != null) {
-            return result.getString("category");
-        }
-        return null;
-    }
     
     /**
      * 文本分类并提取时间方法
@@ -121,17 +105,20 @@ public class QwenUtil {
      */
     public JSONObject classifyWithTime(String text, List<String> categories) {
         // 检查AI功能是否启用
-        if (!isAiEnabled()) return null;
+        if (isAiEnabled()) return null;
 
         // 将类别列表转换为字符串
         String categoriesStr = String.join(", ", categories);
         
         // 构建系统提示词
-        String systemPrompt = String.format("你是一个智能助手。请分析用户的描述。\n" +
-                "1. 将描述准确分类到下列类别之一：[%s]。\n" +
-                "2. 提取描述中的日期/时间信息，并根据当前时间转换为具体的日期格式（YYYY-MM-DD）。\n" +
-                "请严格按照以下JSON格式返回结果，不要输出其他任何内容：\n" +
-                "{\"category\": \"类别名称\", \"date\": \"YYYY-MM-DD\"}。如果未提及时间，date字段请返回null。", categoriesStr);
+        String systemPrompt = String.format("""
+                你是一个智能账单分析助手。请分析用户的交易描述。
+                1. 将描述准确分类到下列类别之一：[%s]。
+                2. 提取描述中的日期/时间信息，并根据当前时间转换为具体的日期格式（YYYY-MM-DD）。
+                3. 提取商户名（merchant）和备注（remark/description）。商户名通常是品牌名或店名（如“瑞幸”、“星巴克”、“肯德基”），备注通常是消费的具体物品或意图（如“午饭”、“打车”、“买菜”）。
+                请严格按照以下JSON格式返回结果，不要输出其他任何内容：
+                {"category": "类别名称", "date": "YYYY-MM-DD", "merchant": "提取的商户名", "remark": "提取的备注"}。
+                如果字段未提及，请返回null。""", categoriesStr);
         // 构建用户提示词
         String userPrompt = String.format("描述：\"%s\"", text);
 
@@ -140,82 +127,11 @@ public class QwenUtil {
         
         if (result != null) {
             try {
-                // 清理可能存在的 Markdown 代码块标记
-                if (result.startsWith("```json")) {
-                    result = result.substring(7);
-                    if (result.endsWith("```")) {
-                        result = result.substring(0, result.length() - 3);
-                    }
-                }
-                result = result.trim();
                 return JSON.parseObject(result);
             } catch (Exception e) {
-                log.error("Error parsing classification result with time", e);
+                log.error("Error parsing classification result with time: {}", result, e);
             }
         }
-        return null;
-    }
-
-    /**
-     * 批量文本分类方法
-     * 将输入的多个文本分别分类到指定的类别列表中的某一类
-     *
-     * @param texts 待分类的文本描述列表
-     * @param categories 可选的类别列表
-     * @return 分类结果列表，每个元素是对应的分类结果；如果AI功能未启用或发生错误则返回null
-     */
-    public List<String> batchClassify(List<String> texts, List<String> categories) {
-        // 检查AI功能是否启用
-        if (!isAiEnabled()) return null;
-        
-        // 将类别列表转换为字符串
-        String categoriesStr = String.join(", ", categories);
-        
-        // 构建系统提示词
-        String systemPrompt = String.format("你是一个智能分类助手。请将以下每条描述分别准确分类到下列类别之一：[%s]。\n" +
-                "请严格按照以下JSON格式返回结果，不要输出其他任何内容：\n" +
-                "[{\"index\": 0, \"category\": \"分类1\"}, {\"index\": 1, \"category\": \"分类2\"}]", categoriesStr);
-        
-        StringBuilder userPromptBuilder = new StringBuilder();
-        userPromptBuilder.append("需要分类的描述如下：\n");
-        for (int i = 0; i < texts.size(); i++) {
-            userPromptBuilder.append(i).append(". \"").append(texts.get(i)).append("\"\n");
-        }
-        
-        // 调用Qwen API并返回结果
-        String result = callQwenApi(systemPrompt, userPromptBuilder.toString());
-        
-        if (result != null) {
-            try {
-                // 解析返回的JSON数组
-                // 有时候模型可能返回 ```json ... ```，需要清理
-                if (result.startsWith("```json")) {
-                    result = result.substring(7);
-                    if (result.endsWith("```")) {
-                        result = result.substring(0, result.length() - 3);
-                    }
-                }
-                result = result.trim();
-                
-                JSONArray jsonArray = JSON.parseArray(result);
-                String[] results = new String[texts.size()];
-                
-                // 按照索引填充结果
-                for (int i = 0; i < jsonArray.size(); i++) {
-                    JSONObject obj = jsonArray.getJSONObject(i);
-                    int index = obj.getIntValue("index");
-                    String category = obj.getString("category");
-                    if (index >= 0 && index < results.length) {
-                        results[index] = category;
-                    }
-                }
-                
-                return Arrays.asList(results);
-            } catch (Exception e) {
-                log.error("Error parsing batch classification result", e);
-            }
-        }
-        
         return null;
     }
     
@@ -227,7 +143,7 @@ public class QwenUtil {
      * @return AI 生成的财务建议
      */
     public String getFinancialAdvice(String spendingSummary) {
-        if (!isAiEnabled()) {
+        if (isAiEnabled()) {
             log.debug("AI 功能未启用，返回默认提示");
             return "AI Module is disabled.";
         }
@@ -257,7 +173,7 @@ public class QwenUtil {
      *         remark(备注), merchant(商户), isExpected(是否预计支出)
      */
     public String parseOcrTexts(Long userId, List<String> ocrTexts) {
-        if (!isAiEnabled()) {
+        if (isAiEnabled()) {
             log.warn("AI 功能未启用，无法解析 OCR 文本");
             return null;
         }
@@ -271,19 +187,8 @@ public class QwenUtil {
         List<CategoryVo> categoryVos = categoryService.getUserCategoriesWithSubCategories(userId, null);
         
         // 将分类列表转换为 AI 可理解的格式字符串
-        StringBuilder categoriesBuilder = new StringBuilder();
-        categoriesBuilder.append("可用分类列表（层级结构）：\n");
-        for (CategoryVo cat : categoryVos) {
-            String catType = (cat.getType() == 1 ? "支出" : "收入");
-            categoriesBuilder.append(String.format("- [%s] %s (ID: %d, Icon: %s)\n", catType, cat.getName(), cat.getId(), cat.getCategoryIcon()));
-            if (cat.getSubCategories() != null && !cat.getSubCategories().isEmpty()) {
-                for (SubCategory sub : cat.getSubCategories()) {
-                    String subIcon = sub.getCategoryIcon() != null ? sub.getCategoryIcon() : cat.getCategoryIcon();
-                    categoriesBuilder.append(String.format("  * %s (ID: %d, ParentID: %d, Icon: %s)\n", sub.getName(), sub.getId(), cat.getId(), subIcon));
-                }
-            }
-        }
-
+        StringBuilder categoriesBuilder = getCategoriesBuilder(categoryVos);
+        
         // 构建系统提示词
         String systemPrompt = "你是一个智能 OCR 账单解析助手。请从用户提供的 OCR 文本中提取账单信息。\n" +
                 "要求：\n" +
@@ -292,7 +197,7 @@ public class QwenUtil {
                 "3. **必须**从提供的可用分类列表中选择最合适的分类。优先选择子分类（带 * 标记的），如果找不到合适的子分类，再选择对应的主分类（带 - 标记的）。\n" +
                 "4. 严格按照 JSON 格式返回，不要输出其他内容\n" +
                 "\n" +
-                categoriesBuilder.toString() + "\n" +
+                categoriesBuilder + "\n" +
                 "返回格式示例：\n" +
                 "[{\"amount\": 25.5, \"type\": 1, \"categoryId\": 1, \"categoryName\": \"餐饮\", \"subCategoryId\": 10, \"subCategoryName\": \"午餐\", \"categoryIcon\": \"res:restaurant\", \"merchant\": \"麦当劳\", \"billTime\": \"2026-03-22 12:00:00\", \"remark\": \"午餐\", \"isExpected\": false,\"orderNumber\": \"123123123\" }]\n" +
                 "\n" +
@@ -322,27 +227,35 @@ public class QwenUtil {
         
         if (result != null) {
             try {
-                // 清理可能存在的 Markdown 代码块标记
-                if (result.startsWith("```json")) {
-                    result = result.substring(7);
-                    if (result.endsWith("```")) {
-                        result = result.substring(0, result.length() - 3);
-                    }
-                }
-                result = result.trim();
-                
                 // 验证返回的 JSON 是否有效
                 JSON.parseArray(result);
                 return result;
             } catch (Exception e) {
-                log.error("解析 OCR 文本失败", e);
+                log.error("解析 OCR 文本失败: {}", result, e);
             }
         }
         
         return null;
     }
     
-
+    @NotNull
+    private StringBuilder getCategoriesBuilder(List<CategoryVo> categoryVos) {
+        StringBuilder categoriesBuilder = new StringBuilder();
+        categoriesBuilder.append("可用分类列表（层级结构）：\n");
+        for (CategoryVo cat : categoryVos) {
+            String catType = (cat.getType() == 1 ? "支出" : "收入");
+            categoriesBuilder.append(String.format("- [%s] %s (ID: %d, Icon: %s)\n", catType, cat.getName(), cat.getId(), cat.getCategoryIcon()));
+            if (cat.getSubCategories() != null && !cat.getSubCategories().isEmpty()) {
+                for (SubCategory sub : cat.getSubCategories()) {
+                    String subIcon = sub.getCategoryIcon() != null ? sub.getCategoryIcon() : cat.getCategoryIcon();
+                    categoriesBuilder.append(String.format("  * %s (ID: %d, ParentID: %d, Icon: %s)\n", sub.getName(), sub.getId(), cat.getId(), subIcon));
+                }
+            }
+        }
+        return categoriesBuilder;
+    }
+    
+    
     /**
      * 检查 AI 功能是否启用
      *
@@ -350,7 +263,7 @@ public class QwenUtil {
      */
     private boolean isAiEnabled() {
         Boolean enabled = aiConfig.getModelEnabled();
-        return enabled != null && enabled;
+        return enabled == null || !enabled;
     }
 
     /**
@@ -395,18 +308,12 @@ public class QwenUtil {
 
         // 创建 HTTP 请求
         Request request = createHttpRequest(apiUrl, apiKey, requestBody);
-
-        Response response = null;
-        try {
-            response = client.newCall(request).execute();
+        
+        try (Response response = client.newCall(request).execute()) {
             return handleResponse(response);
         } catch (IOException e) {
             log.error("调用 AI API 异常", e);
             return null;
-        } finally {
-            if (response != null) {
-                response.close();
-            }
         }
     }
     
@@ -574,13 +481,21 @@ public class QwenUtil {
         // 去除首尾空格
         content = content.trim();
             
-        // 去除 Markdown 代码块标记
-        content = MARKDOWN_CODE_BLOCK_PATTERN.matcher(content).replaceAll("");
-        content = content.trim();
+        // 1. 处理 Markdown 代码块标记 (例如 ```json ... ```)
+        // 匹配 ```json, ```JSON, ``` 或单独的 ```
+        if (content.contains("```")) {
+            // 尝试匹配中间的内容
+            java.util.regex.Matcher matcher = JSON_BLOCK_PATTERN.matcher(content);
+            if (matcher.find()) {
+                content = matcher.group(1).trim();
+            } else {
+                // 如果没有成对出现，尝试直接移除标记
+                content = MARKDOWN_CODE_BLOCK_PATTERN.matcher(content).replaceAll("").trim();
+            }
+        }
             
-        // 去除首尾的引号
-        content = content.replaceAll("^\"|\"$", "");
-            
+        // 2. 去除首尾的引号 (有些模型会给结果加引号)
+        content = content.replaceAll("^\"|\"$", "").trim();
         return content;
     }
 }

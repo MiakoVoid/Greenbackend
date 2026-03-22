@@ -2,6 +2,7 @@ package com.it.greenfinance.mapper;
 
 import com.it.greenfinance.pojo.SystemConfig;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
@@ -16,6 +17,7 @@ import java.util.List;
  * @author ${author}
  * @since 2025-10-25
  */
+@Mapper
 public interface SystemConfigMapper extends BaseMapper<SystemConfig> {
     
     /**

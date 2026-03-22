@@ -2,6 +2,7 @@ package com.it.greenfinance.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.it.greenfinance.pojo.Budget;
+import org.apache.ibatis.annotations.Mapper;
 
 /**
  * <p>
@@ -11,6 +12,7 @@ import com.it.greenfinance.pojo.Budget;
  * @author ${author}
  * @since 2025-10-25
  */
+@Mapper
 public interface BudgetMapper extends BaseMapper<Budget> {
     
 

@@ -78,6 +78,18 @@ public class BillServiceImpl extends ServiceImpl<BillMapper, Bill> implements Bi
             throw new IllegalArgumentException("分类ID不能为空");
         }
         
+        // 计算并校验金额
+        calculateAndValidateAmount(bill);
+        
+        if (bill.getBillTime() == null) {
+            bill.setBillTime(new Date());
+        }
+        save(bill);
+        
+        return convertToVo(bill);
+    }
+    
+    private void calculateAndValidateAmount(Bill bill) {
         if (bill.getRefundAmount() == null) {
             bill.setRefundAmount(BigDecimal.ZERO);
         }
@@ -87,20 +99,8 @@ public class BillServiceImpl extends ServiceImpl<BillMapper, Bill> implements Bi
             throw new IllegalArgumentException("退款金额不能超过原始金额");
         }
         
-        if (bill.getOriginalAmount() != null && bill.getRefundAmount() != null) {
-            bill.setAmount(bill.getOriginalAmount().subtract(bill.getRefundAmount()));
-        }
-        
-        if (bill.getBillTime() == null) {
-            bill.setBillTime(new Date());
-        }
-        save(bill);
-        
-        BillVo vo = convertToVo(bill);
-        
-        return vo;
+        bill.setAmount(bill.getOriginalAmount().subtract(bill.getRefundAmount()));
     }
-    
     
     /**
      * 获取账单列表
@@ -122,19 +122,17 @@ public class BillServiceImpl extends ServiceImpl<BillMapper, Bill> implements Bi
             queryWrapper.like("bill_time", billBo.getBillTime());
         }
         // 时间范围筛选
-        if (billBo.getStartTime()!=null){
+        if (billBo.getStartTime() != null) {
             queryWrapper.ge("bill_time", billBo.getStartTime());
-            System.out.println(billBo.getStartTime());
         }
-        if (billBo.getEndTime()!=null){
+        if (billBo.getEndTime() != null) {
             queryWrapper.le("bill_time", billBo.getEndTime());
-            System.out.println(billBo.getEndTime());
         }
         // 金额匹配
-        if (billBo.getOriginalAmount()!= null) {
+        if (billBo.getOriginalAmount() != null) {
             queryWrapper.like("original_amount", billBo.getOriginalAmount());
         }
-        if (billBo.getRefundAmount() != null){
+        if (billBo.getRefundAmount() != null) {
             queryWrapper.like("refund_amount", billBo.getRefundAmount());
             if (billBo.getOriginalAmount() != null) {
                 BigDecimal calculatedAmount = billBo.getOriginalAmount().subtract(billBo.getRefundAmount());
@@ -193,43 +191,38 @@ public class BillServiceImpl extends ServiceImpl<BillMapper, Bill> implements Bi
         if (existing == null || !existing.getUserId().equals(userId)) {
             throw new IllegalArgumentException("账单不存在或无权修改");
         }
-        if (billBo.getSubCategoryId() != null && billBo.getCategoryId() != null) {
-            SubCategory sc = subCategoryMapper.selectById(billBo.getSubCategoryId());
-            if (sc == null || !sc.getCategoryId().equals(billBo.getCategoryId())) {
-                throw new IllegalArgumentException("子分类不存在或不属于该主分类");
-            }
-        }
+        
+        // 校验分类从属关系
+        validateCategoryRelation(billBo.getCategoryId(), billBo.getSubCategoryId());
 
         Bill bill = new Bill();
         BeanUtils.copyProperties(billBo, bill);
         bill.setUserId(userId);
+        
+        // 如果原始金额或退款金额有更新，则重新计算并校验
         if (bill.getRefundAmount() != null || bill.getOriginalAmount() != null) {
-            Bill existingBill = getById(bill.getId());
             if (bill.getRefundAmount() == null) {
-                bill.setRefundAmount(existingBill.getRefundAmount());
-            } else {
-                bill.setRefundAmount(bill.getRefundAmount());
+                bill.setRefundAmount(existing.getRefundAmount());
             }
             if (bill.getOriginalAmount() == null) {
-                bill.setOriginalAmount(existingBill.getOriginalAmount());
+                bill.setOriginalAmount(existing.getOriginalAmount());
             }
-            
-            // 确保两个值都不为null再进行计算
-            if (bill.getOriginalAmount() != null && bill.getRefundAmount() != null) {
-                bill.setAmount(bill.getOriginalAmount().subtract(bill.getRefundAmount()));
-            }
-            
-            // 验证退款金额不能超过原始金额
-            if (bill.getRefundAmount().compareTo(bill.getOriginalAmount()) > 0) {
-                throw new IllegalArgumentException("退款金额不能超过原始金额");
-            }
+            calculateAndValidateAmount(bill);
         }
+        
         bill.setUpdateTime(new Date());
         updateById(bill);
         
-        BillVo vo = convertToVo(bill);
-        
-        return vo;
+        return convertToVo(bill);
+    }
+
+    private void validateCategoryRelation(Long categoryId, Long subCategoryId) {
+        if (subCategoryId != null && categoryId != null) {
+            SubCategory sc = subCategoryMapper.selectById(subCategoryId);
+            if (sc == null || !sc.getCategoryId().equals(categoryId)) {
+                throw new IllegalArgumentException("子分类不存在或不属于该主分类");
+            }
+        }
     }
     
     @Override
@@ -442,19 +435,26 @@ public class BillServiceImpl extends ServiceImpl<BillMapper, Bill> implements Bi
             throw new IllegalArgumentException("请先登录后再创建账单");
         }
         
-        // 批量创建账单
-        List<BillVo> result = new ArrayList<>();
-        for (BillBo billBo : bills) {
-            try {
-                BillVo billVo = createBill(billBo);
-                result.add(billVo);
-            } catch (Exception e) {
-                // 记录错误并继续处理其他账单
-                throw new RuntimeException("创建账单失败：" + e.getMessage(), e);
+        List<Bill> billEntities = bills.stream().map(billBo -> {
+            Bill bill = new Bill();
+            BeanUtils.copyProperties(billBo, bill);
+            bill.setUserId(userId);
+            
+            // 校验字段
+            if (bill.getOriginalAmount() == null || bill.getType() == null || bill.getCategoryId() == null) {
+                throw new IllegalArgumentException("原始金额、类型和分类ID不能为空");
             }
-        }
+            
+            calculateAndValidateAmount(bill);
+            if (bill.getBillTime() == null) {
+                bill.setBillTime(new Date());
+            }
+            return bill;
+        }).collect(Collectors.toList());
         
-        return result;
+        saveBatch(billEntities);
+        
+        return billEntities.stream().map(this::convertToVo).collect(Collectors.toList());
     }
     
     /**
@@ -466,41 +466,30 @@ public class BillServiceImpl extends ServiceImpl<BillMapper, Bill> implements Bi
         BillVo billVo = new BillVo();
         BeanUtils.copyProperties(bill, billVo);
         billVo.setUserId(userContextUtil.getCurrentUserId());
-        setCategoryNames(bill, billVo);
-        setIconIdentifier(bill, billVo);
+        
+        // 填充分类名称和图标
+        fillCategoryAndIcon(bill, billVo);
+        
         return billVo;
     }
     
-   public void setCategoryNames(Bill bill, BillVo billVo) {
-        if (bill.getCategoryId() != null) {
-            Category category = categoryMapper.selectById(bill.getCategoryId());
-            if (category != null) {
-                billVo.setCategoryName(category.getName());
-            }
-        }
+    private void fillCategoryAndIcon(Bill bill, BillVo billVo) {
         if (bill.getSubCategoryId() != null) {
             SubCategory subCategory = subCategoryMapper.selectById(bill.getSubCategoryId());
             if (subCategory != null) {
                 billVo.setSubCategoryName(subCategory.getName());
-            }
-        }
-    }
-    
-    /**
-     * 设置图标标识符：优先使用子分类图标，若无则使用主分类图标
-     */
-    private void setIconIdentifier(Bill bill, BillVo billVo) {
-        if (bill.getSubCategoryId() != null) {
-            SubCategory subCategory = subCategoryMapper.selectById(bill.getSubCategoryId());
-            if (subCategory != null && subCategory.getCategoryIcon() != null) {
                 billVo.setCategoryIcon(subCategory.getCategoryIcon());
-                return;
             }
         }
+        
         if (bill.getCategoryId() != null) {
             Category category = categoryMapper.selectById(bill.getCategoryId());
-            if (category != null && category.getCategoryIcon() != null) {
-                billVo.setCategoryIcon(category.getCategoryIcon());
+            if (category != null) {
+                billVo.setCategoryName(category.getName());
+                // 如果子分类没有图标，则使用主分类图标
+                if (billVo.getCategoryIcon() == null) {
+                    billVo.setCategoryIcon(category.getCategoryIcon());
+                }
             }
         }
     }

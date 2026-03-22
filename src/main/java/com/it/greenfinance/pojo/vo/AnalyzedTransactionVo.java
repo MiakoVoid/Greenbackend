@@ -12,9 +12,14 @@ public class AnalyzedTransactionVo {
     private String originalText;
 
     /**
-     * Extracted description/merchant name
+     * Extracted remark
      */
-    private String description;
+    private String remark;
+
+    /**
+     * Extracted merchant name
+     */
+    private String merchant;
 
     /**
      * Extracted amount

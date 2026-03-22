@@ -59,6 +59,7 @@ public class FinancialAdviceVo {
     @Data
     public static class ExpectedExpenseRemindVo {
         private Long id;
+        private Long categoryId;
         private String remark;
         private BigDecimal amount;
         private String dueDate;

@@ -2,6 +2,7 @@ package com.it.greenfinance.mapper;
 
 import com.it.greenfinance.pojo.User;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Mapper;
 
 /**
  * <p>
@@ -11,6 +12,7 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
  * @author ${author}
  * @since 2025-10-25
  */
+@Mapper
 public interface UserMapper extends BaseMapper<User> {
 
 }

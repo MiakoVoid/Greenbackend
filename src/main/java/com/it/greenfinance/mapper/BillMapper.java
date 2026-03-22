@@ -2,6 +2,7 @@ package com.it.greenfinance.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.it.greenfinance.pojo.Bill;
+import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
@@ -16,6 +17,7 @@ import java.util.Date;
  * @author ${author}
  * @since 2025-10-25
  */
+@Mapper
 public interface BillMapper extends BaseMapper<Bill> {
     
     /**
