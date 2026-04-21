@@ -8,10 +8,8 @@ import com.it.utils.UserContextUtil;
 import io.swagger.annotations.Api;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
-import javax.validation.Valid;
 
-import java.util.UUID;
+import javax.validation.Valid;
 
 /**
  * <p>

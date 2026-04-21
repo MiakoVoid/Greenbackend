@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="SqlDialectMappings">
+    <file url="file://$PROJECT_DIR$/src/main/resources/mysql/1.sql" dialect="MySQL" />
+    <file url="file://$PROJECT_DIR$/src/main/resources/mysql/category.sql" dialect="MySQL" />
     <file url="file://$PROJECT_DIR$/src/main/resources/mysql/keyward.sql" dialect="MySQL" />
+    <file url="file://$PROJECT_DIR$/src/main/resources/mysql/system_config.sql" dialect="MySQL" />
   </component>
 </project>

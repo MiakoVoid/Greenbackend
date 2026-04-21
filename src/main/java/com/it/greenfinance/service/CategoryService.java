@@ -30,7 +30,6 @@ public interface CategoryService extends IService<Category> {
      * 保存分类
      *
      * @param categoryBo 分类信息
-     * @param userId
      * @return 保存后的分类
      */
     CategoryVo saveCategory(CategoryBo categoryBo, Long userId);
@@ -52,4 +51,6 @@ public interface CategoryService extends IService<Category> {
      * @return 是否删除成功
      */
     boolean removeCategoryById(Long id, Long userId);
+    
+    List<String> buildIconLibrary(Integer type);
 }

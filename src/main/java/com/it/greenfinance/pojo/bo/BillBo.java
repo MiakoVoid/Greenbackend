@@ -1,15 +1,15 @@
   package com.it.greenfinance.pojo.bo;
-
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.experimental.Accessors;
-import org.springframework.format.annotation.DateTimeFormat;
-
-import javax.validation.constraints.*;
-import java.io.Serial;
-import java.math.BigDecimal;
-import java.util.Date;
-import java.io.Serializable;
+  
+  import lombok.Data;
+  import lombok.EqualsAndHashCode;
+  import lombok.experimental.Accessors;
+  import org.springframework.format.annotation.DateTimeFormat;
+  
+  import javax.validation.constraints.*;
+  import java.io.Serial;
+  import java.io.Serializable;
+  import java.math.BigDecimal;
+  import java.util.Date;
 
 /**
  * <p>

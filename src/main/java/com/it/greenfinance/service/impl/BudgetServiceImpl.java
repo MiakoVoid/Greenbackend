@@ -1,7 +1,6 @@
 package com.it.greenfinance.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.baomidou.mybatisplus.core.injector.methods.SelectOne;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.it.greenfinance.mapper.BillMapper;
@@ -14,13 +13,13 @@ import com.it.greenfinance.pojo.vo.BudgetStatisticsVo;
 import com.it.greenfinance.pojo.vo.BudgetVo;
 import com.it.greenfinance.service.BudgetService;
 import com.it.utils.UserContextUtil;
-import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Date;
 
 /**
@@ -149,7 +148,9 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
     public BudgetStatisticsVo getStatistics(BudgetBo bo) {
         if(bo.getYear()== null|| bo.getMonth()== null)
             throw new IllegalArgumentException("参数错误");
-        LocalDate currentDate = LocalDate.now();
+        // 获取中国大陆时区
+        ZoneId zone = ZoneId.of("Asia/Shanghai");
+        LocalDate currentDate = LocalDate.now(zone);
         
         // 获取账单周期起始日和结束日
         int billMonthStartDay = Integer.parseInt(systemConfigMapper.getBillMonthStartDay(bo.getUserId()));
@@ -164,7 +165,7 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
             totalBudget = budget.getAmount();
         }
         
-        // 获取本月已使用的支出（按账单周期计算，不包括今天）
+        // 获取本月已使用的支出（按账单周期计算，包括今天）
         Date today = java.sql.Date.valueOf(currentDate);
         BigDecimal used = billMapper.getBillCycleAmountByType(
             bo.getUserId(), 
@@ -175,18 +176,25 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
         
         // 获取今天的支出
         BigDecimal todayExpense = billMapper.getDayAmountByType(bo.getUserId(), today, 1);
-        used = used.subtract(todayExpense); // 从已使用中排除今天的支出
         
         // 获取本月预计支出
         BigDecimal expected = expectedExpenseMapper.getMonthExpectedAmount(bo.getUserId(), today);
         
         // 计算剩余金额 = 总预算 - 已使用 - 本月预计支出
+        // 此时 used 已包含今日消费，所以 remaining 是真正的剩余可用金额
         BigDecimal remaining = totalBudget.subtract(used).subtract(expected);
         
-        // 计算每日预算 = 剩余预算 / 剩余天数
+        // 计算每日预算 = (剩余金额 + 今日消费) / 剩余天数
+        // 这里的逻辑是：将“今日还没花之前的剩余预算”平均分配到包括今天在内的剩余天数中
         long remainingDaysLong = java.time.temporal.ChronoUnit.DAYS.between(currentDate, lastDayOfBillCycle) + 1;
-        int remainingDays = (int) Math.max(0, remainingDaysLong); // 确保不会为负数
-        BigDecimal daily = (remainingDays > 0) ? remaining.divide(BigDecimal.valueOf(remainingDays), 2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
+        int remainingDays = (int) Math.max(0, remainingDaysLong); 
+        
+        BigDecimal daily = BigDecimal.ZERO;
+        if (remainingDays > 0) {
+            // 可分配总额 = 剩余金额 + 今日已花金额
+            BigDecimal allocatableAmount = remaining.add(todayExpense);
+            daily = allocatableAmount.divide(BigDecimal.valueOf(remainingDays), 2, RoundingMode.HALF_UP);
+        }
         
         // 计算今日剩余金额 = 每日预算 - 今日支出
         BigDecimal todayRemaining = daily.subtract(todayExpense);

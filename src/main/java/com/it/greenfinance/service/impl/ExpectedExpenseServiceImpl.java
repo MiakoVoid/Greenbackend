@@ -78,26 +78,39 @@ public class ExpectedExpenseServiceImpl extends ServiceImpl<ExpectedExpenseMappe
     }
 
     /**
-     * 将实体转换为 VO 并设置图标
+     * 将实体转换为 VO 并设置图标和分类名称
      */
     private ExpectedExpenseVo convertToVo(ExpectedExpense expense) {
         ExpectedExpenseVo vo = new ExpectedExpenseVo();
         BeanUtils.copyProperties(expense, vo);
         
-        // 优先使用子分类图标
+        // 优先使用子分类图标和名称
         if (expense.getSubCategoryId() != null) {
             Category subCategory = categoryService.getById(expense.getSubCategoryId());
-            if (subCategory != null && subCategory.getCategoryIcon() != null) {
-                vo.setCategoryIcon(subCategory.getCategoryIcon());
-                return vo;
+            if (subCategory != null) {
+                vo.setSubCategoryName(subCategory.getName());
+                if (subCategory.getCategoryIcon() != null) {
+                    vo.setCategoryIcon(subCategory.getCategoryIcon());
+                    // 同时获取主分类名称
+                    if (expense.getCategoryId() != null) {
+                        Category category = categoryService.getById(expense.getCategoryId());
+                        if (category != null) {
+                            vo.setCategoryName(category.getName());
+                        }
+                    }
+                    return vo;
+                }
             }
         }
         
-        // 其次使用主分类图标
+        // 其次使用主分类图标和名称
         if (expense.getCategoryId() != null) {
             Category category = categoryService.getById(expense.getCategoryId());
-            if (category != null && category.getCategoryIcon() != null) {
-                vo.setCategoryIcon(category.getCategoryIcon());
+            if (category != null) {
+                vo.setCategoryName(category.getName());
+                if (category.getCategoryIcon() != null) {
+                    vo.setCategoryIcon(category.getCategoryIcon());
+                }
             }
         }
         return vo;

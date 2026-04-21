@@ -16,7 +16,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.io.IOException;
-import java.util.Objects;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
@@ -62,9 +61,8 @@ public class QwenUtil {
 //    private static final String DEFAULT_BASE_URL = "https://ms-ens-2c9319b7-9b0e.api-inference.modelscope.cn/v1";
     private static final String DEFAULT_BASE_URL = "https://api-inference.modelscope.cn/v1";
     /**
-     * 默认模型 ID（Qwen2.5-7B-Instruct）
+     * 默认模型 ID（Qwen/Qwen3-4B）
      */
-//    private static final String DEFAULT_MODEL_ID = "Qwen/Qwen2.5-7B-Instruct";
     private static final String DEFAULT_MODEL_ID = "Qwen/Qwen3-4B";
     
     /**
@@ -104,27 +102,37 @@ public class QwenUtil {
      * @return 包含分类结果和时间的JSON对象，例如 {"category": "餐饮", "date": "2023-10-01"}
      */
     public JSONObject classifyWithTime(String text, List<String> categories) {
-        // 检查AI功能是否启用
-        if (isAiEnabled()) return null;
+        // 检查AI功能是否开启
+        if (isAiDisabled()) return null;
 
         // 将类别列表转换为字符串
         String categoriesStr = String.join(", ", categories);
         
-        // 构建系统提示词
+        // 构建系统提示词（优化：更严谨的指令和示例）
         String systemPrompt = String.format("""
-                你是一个智能账单分析助手。请分析用户的交易描述。
-                1. 将描述准确分类到下列类别之一：[%s]。
-                2. 提取描述中的日期/时间信息，并根据当前时间转换为具体的日期格式（YYYY-MM-DD）。
-                3. 提取商户名（merchant）和备注（remark/description）。商户名通常是品牌名或店名（如“瑞幸”、“星巴克”、“肯德基”），备注通常是消费的具体物品或意图（如“午饭”、“打车”、“买菜”）。
-                请严格按照以下JSON格式返回结果，不要输出其他任何内容：
-                {"category": "类别名称", "date": "YYYY-MM-DD", "merchant": "提取的商户名", "remark": "提取的备注"}。
-                如果字段未提及，请返回null。""", categoriesStr);
+                你是一个精准的账单分析助手。请分析用户的交易描述并提取结构化信息。
+                
+                【任务目标】
+                1. 分类：从下列类别中选择一个最合适的：[%s]。
+                   重要规则：如果列表中包含具体的子分类（如"早餐"、"午餐"、"晚餐"、"房租"等），必须优先选择子分类，而不是宽泛的主分类（如"餐饮"、"居家"）。
+                   只有当没有匹配的子分类时，才选择主分类。
+                2. 日期：提取日期并转为 YYYY-MM-DD。若无明确日期，基于当前系统日期推断。
+                3. 商户：识别交易对方（品牌/店名）。
+                4. 备注：识别交易具体内容（如：午餐、打车费）。
+                
+                【约束条件】
+                - 必须返回纯 JSON 格式，严禁包含 Markdown 标记、代码块或解释性文字。
+                - 如果无法确定某字段，请返回 null。
+                
+                【输出示例】
+                {"category": "午餐", "date": "2024-03-22", "merchant": "麦当劳", "remark": "巨无霸套餐"}
+                """, categoriesStr);
         // 构建用户提示词
-        String userPrompt = String.format("描述：\"%s\"", text);
+        String userPrompt = String.format("交易描述：\"%s\"", text);
 
-        // 调用Qwen API并返回结果
-        String result = callQwenApi(systemPrompt, userPrompt);
-        
+        // 调用Qwen API并返回结果（提取任务使用低温度）
+        String result = callQwenApi(systemPrompt, userPrompt, 0.1);
+
         if (result != null) {
             try {
                 return JSON.parseObject(result);
@@ -143,8 +151,8 @@ public class QwenUtil {
      * @return AI 生成的财务建议
      */
     public String getFinancialAdvice(String spendingSummary) {
-        if (isAiEnabled()) {
-            log.debug("AI 功能未启用，返回默认提示");
+        if (isAiDisabled()) {
+            log.debug("AI 功能未开启，返回默认提示");
             return "AI Module is disabled.";
         }
         
@@ -154,12 +162,12 @@ public class QwenUtil {
         }
 
         // 构建系统提示词
-        String systemPrompt = "你是一个贴心的理财小伙伴，请以好朋友的口吻给出温暖的建议。用轻松友好的语调给出 3 条简短建议，帮助用户更好地管理财务。避免称呼，请用亲切自然可爱的语言，避免说教，每条建议控制在 20 字以内。";
+        String systemPrompt = "你是一个贴心的理财小伙伴，要求通过支出摘要建立简单的用户画像。请以好朋友的口吻给出温暖、实际的建议。用轻松友好的语调给出 3 条简短建议，帮助用户更好地管理财务。避免称呼，请用亲切自然的语言，避免说教，每条建议控制在 20 字以内。";
         // 构建用户提示词
         String userPrompt = String.format("根据以下月度支出情况给出建议。摘要：%s", spendingSummary);
         
-        // 调用 Qwen API 并返回结果
-        return callQwenApi(systemPrompt, userPrompt);
+        // 调用 Qwen API 并返回结果（建议任务使用略高温度）
+        return callQwenApi(systemPrompt, userPrompt, 0.7);
     }
     
     /**
@@ -173,8 +181,8 @@ public class QwenUtil {
      *         remark(备注), merchant(商户), isExpected(是否预计支出)
      */
     public String parseOcrTexts(Long userId, List<String> ocrTexts) {
-        if (isAiEnabled()) {
-            log.warn("AI 功能未启用，无法解析 OCR 文本");
+        if (isAiDisabled()) {
+            log.warn("AI 功能未开启，无法解析 OCR 文本");
             return null;
         }
         
@@ -189,31 +197,22 @@ public class QwenUtil {
         // 将分类列表转换为 AI 可理解的格式字符串
         StringBuilder categoriesBuilder = getCategoriesBuilder(categoryVos);
         
-        // 构建系统提示词
-        String systemPrompt = "你是一个智能 OCR 账单解析助手。请从用户提供的 OCR 文本中提取账单信息。\n" +
-                "要求：\n" +
-                "1. 识别每笔交易的：金额、类型（支出/收入）、分类、商户、时间、备注\n" +
-                "2. 如果文本中提到'预计'、'计划'、'准备'等词语，标记为预计支出（isExpected=true）\n" +
-                "3. **必须**从提供的可用分类列表中选择最合适的分类。优先选择子分类（带 * 标记的），如果找不到合适的子分类，再选择对应的主分类（带 - 标记的）。\n" +
-                "4. 严格按照 JSON 格式返回，不要输出其他内容\n" +
+        // 构建系统提示词（优化：更精简和明确的指令）
+        String systemPrompt = "你是一个专业 OCR 账单解析专家。请从 OCR 文本中提取每笔交易的信息。\n" +
+                "【分类规则】\n" +
+                "1. 必须从提供的分类列表中选择最合适的 ID。\n" +
+                "2. 优先选择带 * 的子分类，找不到合适的再选带 - 的主分类。\n" +
+                "【提取规则】\n" +
+                "1. 金额（amount）：提取消费金额，统一为正数数字。\n" +
+                "2. 类型（type）：1-支出，2-收入。\n" +
+                "3. 时间（billTime）：格式 YYYY-MM-DD HH:mm:ss。**若 OCR 文本中没有明确的时间信息，必须使用当前系统时间作为默认值**。\n" +
+                "4. 预计支出（isExpected）：若含有'计划'、'准备'等词，设为 true。\n" +
+                "【返回要求】\n" +
+                "- 必须返回纯 JSON 数组，严禁任何解释文本。\n" +
                 "\n" +
                 categoriesBuilder + "\n" +
-                "返回格式示例：\n" +
-                "[{\"amount\": 25.5, \"type\": 1, \"categoryId\": 1, \"categoryName\": \"餐饮\", \"subCategoryId\": 10, \"subCategoryName\": \"午餐\", \"categoryIcon\": \"res:restaurant\", \"merchant\": \"麦当劳\", \"billTime\": \"2026-03-22 12:00:00\", \"remark\": \"午餐\", \"isExpected\": false,\"orderNumber\": \"123123123\" }]\n" +
-                "\n" +
-                "字段说明：\n" +
-                "- amount: 金额（数字）取绝对值\n" +
-                "- type: 类型（1=支出，2=收入）\n" +
-                "- categoryId: 所选分类的主分类 ID（必填，如果是子分类则填其 ParentID，如果是主分类则填其 ID）\n" +
-                "- categoryName: 所选分类的主分类名称（必填）\n" +
-                "- subCategoryId: 所选分类的子分类 ID（可选，如果选择了子分类则必填）\n" +
-                "- subCategoryName: 所选分类的子分类名称（可选，如果选择了子分类则必填）\n" +
-                "- categoryIcon: 所选分类的图标字符串（必填，来自分类列表中的 Icon 字段）\n" +
-                "- merchant: 商户名称（可选，字符串）\n" +
-                "- billTime: 账单时间（可选，格式 YYYY-MM-DD HH:mm:ss）\n" +
-                "- remark: 备注（可选，字符串）\n" +
-                "- orderNumber: 订单号（可选，字符串）\n"+
-                "- isExpected: 是否预计支出（布尔值，默认为 false）";
+                "【JSON 示例】\n" +
+                "[{\"amount\": 30.0, \"type\": 1, \"categoryId\": 1, \"categoryName\": \"餐饮\", \"subCategoryId\": 10, \"subCategoryName\": \"晚餐\", \"categoryIcon\": \"res:food\", \"merchant\": \"肯德基\", \"billTime\": \"2024-03-22 18:30:00\", \"remark\": \"吮指原味鸡\", \"isExpected\": false}]";
         
         // 构建用户提示词
         StringBuilder userPromptBuilder = new StringBuilder();
@@ -222,8 +221,8 @@ public class QwenUtil {
             userPromptBuilder.append(i + 1).append(". ").append(ocrTexts.get(i)).append("\n");
         }
         
-        // 调用 Qwen API 并返回结果
-        String result = callQwenApi(systemPrompt, userPromptBuilder.toString());
+        // 调用 Qwen API 并返回结果（解析任务使用低温度）
+        String result = callQwenApi(systemPrompt, userPromptBuilder.toString(), 0.1);
         
         if (result != null) {
             try {
@@ -257,11 +256,11 @@ public class QwenUtil {
     
     
     /**
-     * 检查 AI 功能是否启用
+     * 检查 AI 功能是否未启用（禁用状态）
      *
-     * @return 如果 AI 功能启用返回 true，否则返回 false
+     * @return 如果 AI 功能未开启或配置为禁用返回 true，否则返回 false
      */
-    private boolean isAiEnabled() {
+    private boolean isAiDisabled() {
         Boolean enabled = aiConfig.getModelEnabled();
         return enabled == null || !enabled;
     }
@@ -272,11 +271,12 @@ public class QwenUtil {
      *
      * @param systemPrompt 系统提示词
      * @param userPrompt 用户提示词
+     * @param temperature 温度参数（0.0-2.0），用于控制结果的确定性或创造性
      * @return AI 模型的响应结果；发生错误时返回 null
      */
-    private String callQwenApi(String systemPrompt, String userPrompt) {
-        // 在 System Prompt 中注入当前时间信息，增强 AI 的时间感知能力
-        String timeAwareSystemPrompt = systemPrompt + String.format(" 当前系统日期是：%s。", java.time.LocalDate.now());
+    private String callQwenApi(String systemPrompt, String userPrompt, double temperature) {
+        // 在 System Prompt 中注入当前时间信息，增强 AI 的时间感知能力（使用中国大陆时区）
+        String timeAwareSystemPrompt = systemPrompt + String.format(" 当前系统日期是：%s。", java.time.LocalDate.now(java.time.ZoneId.of("Asia/Shanghai")));
         
         // 获取 API Key（优先数据库，回退配置文件）
         String apiKey = getApiKey();
@@ -301,20 +301,47 @@ public class QwenUtil {
         messages.add(userMessage);
 
         // 构造请求体
-        JSONObject requestBody = buildRequestBody(messages);
+        JSONObject requestBody = buildRequestBody(messages, temperature);
 
         // 确定 API URL
         String apiUrl = buildChatCompletionsUrl(aiConfig.getModelApiUrl());
 
-        // 创建 HTTP 请求
-        Request request = createHttpRequest(apiUrl, apiKey, requestBody);
-        
-        try (Response response = client.newCall(request).execute()) {
-            return handleResponse(response);
-        } catch (IOException e) {
-            log.error("调用 AI API 异常", e);
-            return null;
+        // 重试逻辑
+        int maxRetries = 3;
+        int retryDelayMs = 1000;
+
+        for (int i = 0; i <= maxRetries; i++) {
+            try {
+                Request request = createHttpRequest(apiUrl, apiKey, requestBody);
+                try (Response response = client.newCall(request).execute()) {
+                    if (response.isSuccessful()) {
+                        return handleResponse(response);
+                    }
+                    
+                    int code = response.code();
+                    String errorBody = response.body() != null ? response.body().string() : "";
+                    log.warn("AI API 调用失败 (尝试 {}/{}): code={}, body={}", i + 1, maxRetries + 1, code, errorBody);
+                    
+                    // 只有特定错误码才重试（如 429 频率限制，或 5xx 服务器错误）
+                    if (code != 429 && code < 500) {
+                        break; 
+                    }
+                }
+            } catch (IOException e) {
+                log.error("调用 AI API 异常 (尝试 {}/{}): {}", i + 1, maxRetries + 1, e.getMessage());
+            }
+
+            if (i < maxRetries) {
+                try {
+                    Thread.sleep(retryDelayMs * (long) Math.pow(2, i)); // 指数退避
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
         }
+        
+        return null;
     }
     
     /**
@@ -343,13 +370,15 @@ public class QwenUtil {
      * 构建请求体
      * 
      * @param messages 消息数组
+     * @param temperature 温度
      * @return 请求体 JSON 对象
      */
-    private JSONObject buildRequestBody(JSONArray messages) {
+    private JSONObject buildRequestBody(JSONArray messages, double temperature) {
         JSONObject requestBody = new JSONObject();
         String modelId = StringUtils.hasText(aiConfig.getModelId()) ? aiConfig.getModelId().trim() : DEFAULT_MODEL_ID;
         requestBody.put("model", modelId);
         requestBody.put("messages", messages);
+        requestBody.put("temperature", temperature);
         boolean streamEnabled = Boolean.TRUE.equals(aiConfig.getStreamEnabled());
         requestBody.put("stream", streamEnabled);
         return requestBody;
@@ -382,23 +411,17 @@ public class QwenUtil {
      * @throws IOException IO 异常
      */
     private String handleResponse(Response response) throws IOException {
-        // 检查响应是否成功
-        if (!response.isSuccessful()) {
-            String errorBody = "";
-            if (response.body() != null) {
-                errorBody = response.body().string();
-            }
-            log.error("AI API 调用失败：code={}, body={}", response.code(), errorBody);
+        if (response.body() == null) {
             return null;
         }
 
         // 判断是否需要处理流式响应
         if (Boolean.TRUE.equals(aiConfig.getStreamEnabled())) {
-            return parseStreamResponseToContent(Objects.requireNonNull(response.body()));
+            return parseStreamResponseToContent(response.body());
         }
 
         // 处理普通响应
-        String responseStr = Objects.requireNonNull(response.body()).string();
+        String responseStr = response.body().string();
         JSONObject jsonResponse = JSON.parseObject(responseStr);
         JSONArray choices = jsonResponse.getJSONArray("choices");
         

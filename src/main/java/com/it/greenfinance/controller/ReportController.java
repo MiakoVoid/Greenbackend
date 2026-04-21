@@ -1,7 +1,6 @@
 package com.it.greenfinance.controller;
 
 import com.it.greenfinance.pojo.vo.FinancialAdviceVo;
-import com.it.greenfinance.service.AIService;
 import com.it.greenfinance.service.ReportService;
 import com.it.utils.Result;
 import com.it.utils.UserContextUtil;

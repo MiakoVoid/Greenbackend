@@ -94,6 +94,11 @@ public class AIServiceImpl implements AIService {
     private static final Pattern BILLTIME_PATTERN = Pattern.compile("billtime[:= ]?(\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}:\\d{2})", Pattern.CASE_INSENSITIVE);
     
     private static final DateTimeFormatter DATE_TIME_SEC = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    
+    /**
+     * 默认时区：中国大陆时区
+     */
+    private static final ZoneId DEFAULT_ZONE = ZoneId.of("Asia/Shanghai");
 
     public AIServiceImpl(CategoryKeywordMapper categoryKeywordMapper, SystemConfigMapper systemConfigMapper, CategoryMapper categoryMapper, SubCategoryMapper subCategoryMapper, BillMapper billMapper, QwenUtil qwenUtil, BillService billService, ExpectedExpenseService expectedExpenseService) {
         this.categoryKeywordMapper = categoryKeywordMapper;
@@ -106,6 +111,47 @@ public class AIServiceImpl implements AIService {
         this.expectedExpenseService = expectedExpenseService;
     }
     
+    /**
+     * 内部上下文类，用于在处理流程中传递中间结果，减少重复计算
+     */
+    private static class SegmentContext {
+        final String segment;
+        final List<Term> terms;
+        final List<String> tokens;
+
+        SegmentContext(String segment) {
+            this.segment = segment;
+            this.terms = HanLP.segment(segment);
+            this.tokens = terms.stream()
+                    .map(t -> t.word.toLowerCase())
+                    .collect(Collectors.toList());
+        }
+    }
+
+    /**
+     * 分类查找上下文，预先构建索引提高匹配速度
+     */
+    private static class ClassificationContext {
+        final List<Category> categories;
+        final List<SubCategory> subCategories;
+        final Map<String, SubCategory> subCategoryByName;
+        final Map<String, Category> categoryByName;
+        final List<String> allCategoryNames;
+
+        ClassificationContext(List<Category> categories, List<SubCategory> subCategories) {
+            this.categories = categories;
+            this.subCategories = subCategories;
+            this.subCategoryByName = subCategories.stream()
+                    .collect(Collectors.toMap(sc -> sc.getName().toLowerCase(), sc -> sc, (sc1, sc2) -> sc1));
+            this.categoryByName = categories.stream()
+                    .collect(Collectors.toMap(c -> c.getName().toLowerCase(), c -> c, (c1, c2) -> c1));
+            
+            this.allCategoryNames = new ArrayList<>();
+            categories.forEach(c -> allCategoryNames.add(c.getName()));
+            subCategories.forEach(sc -> allCategoryNames.add(sc.getName()));
+        }
+    }
+
     /**
      * 处理自然语言文本，将其解析为交易记录列表，并自动创建交易
      * 
@@ -120,30 +166,39 @@ public class AIServiceImpl implements AIService {
             return new ArrayList<>();
         }
 
-        LocalDateTime forcedTime = parseForcedTime(text, billTime);
+        // 统一基准参考时间：若传入了 billTime 或文本中有 billtime，则以此为准；否则使用当前服务器时间
+        LocalDateTime tempRefTime = parseForcedTime(text, billTime);
+        if (tempRefTime == null) {
+            tempRefTime = LocalDateTime.now(DEFAULT_ZONE);
+        }
+        final LocalDateTime referenceTime = tempRefTime;
+
         // 如果是从文本中提取的，需要移除 billtime 部分
         String cleanText = (billTime == null && text.toLowerCase().contains("billtime")) 
                 ? BILLTIME_PATTERN.matcher(text).replaceAll("") : text;
 
-        // 预加载分类数据
+        // 预加载分类数据并构建快速查找索引
         List<Category> categories = categoryMapper.selectList(new QueryWrapper<Category>()
                 .isNull("user_id").or().eq("user_id", userId));
         List<SubCategory> subCategories = subCategoryMapper.selectList(new QueryWrapper<SubCategory>()
                 .isNull("user_id").or().eq("user_id", userId));
+        ClassificationContext classCtx = new ClassificationContext(categories, subCategories);
 
-        // 按标点符号分割文本
+        // 按标点符号分割文本并预处理上下文（分词）
         String[] segmentArray = cleanText.split("[,，。;；\\n]|(?<!\\d)\\.|\\.(?!\\d)");
-        List<String> segments = Arrays.stream(segmentArray)
+        List<SegmentContext> contexts = Arrays.stream(segmentArray)
                 .map(String::trim)
                 .filter(StringUtils::hasText)
+                .parallel() // 并行分词
+                .map(SegmentContext::new)
                 .collect(Collectors.toList());
         
         // 预加载关键词
-        Map<String, CategoryKeyword> keywordMap = preloadKeywords(segments);
+        Map<String, CategoryKeyword> keywordMap = preloadKeywordsFromContexts(contexts);
 
         // 并行处理每个文本片段
-        List<AnalyzedTransactionVo> analyzedTransactions = segments.parallelStream()
-                .map(segment -> processSegment(segment, categories, subCategories, forcedTime, keywordMap))
+        List<AnalyzedTransactionVo> analyzedTransactions = contexts.parallelStream()
+                .map(ctx -> processSegment(ctx, classCtx, referenceTime, keywordMap))
                 .collect(Collectors.toList());
         
         // 根据系统设置决定是否自动创建交易
@@ -172,9 +227,7 @@ public class AIServiceImpl implements AIService {
         if (StringUtils.hasText(timeStr)) {
             try {
                 LocalDateTime forcedTime = LocalDateTime.parse(timeStr, DATE_TIME_SEC);
-                if (forcedTime.isAfter(LocalDateTime.now())) {
-                    throw new IllegalArgumentException("Billtime cannot be in the future: " + timeStr);
-                }
+                // 允许未来时间，系统会自动将其标记为预计支出
                 return forcedTime;
             } catch (DateTimeParseException e) {
                 log.error("Invalid billtime format: {}", timeStr);
@@ -185,18 +238,16 @@ public class AIServiceImpl implements AIService {
     }
 
     /**
-     * 预加载关键词
+     * 从预分词上下文中预加载关键词
      */
-    private Map<String, CategoryKeyword> preloadKeywords(List<String> segments) {
-        if (segments == null || segments.isEmpty()) {
+    private Map<String, CategoryKeyword> preloadKeywordsFromContexts(List<SegmentContext> contexts) {
+        if (contexts == null || contexts.isEmpty()) {
             return Collections.emptyMap();
         }
         
         // 收集所有分词
-        Set<String> allTokens = segments.stream()
-                .filter(StringUtils::hasText)
-                .parallel()
-                .flatMap(seg -> HanLP.segment(seg).stream().map(t -> t.word))
+        Set<String> allTokens = contexts.stream()
+                .flatMap(ctx -> ctx.tokens.stream())
                 .collect(Collectors.toSet());
 
         if (allTokens.isEmpty()) {
@@ -216,8 +267,9 @@ public class AIServiceImpl implements AIService {
         }
 
         // 构建映射：关键词 -> CategoryKeyword对象 (若有重复，取权重高的)
+        // 键统一转为小写以支持不区分大小写的匹配
         return keywords.stream().collect(Collectors.toMap(
-                CategoryKeyword::getKeyword,
+                k -> k.getKeyword().toLowerCase(),
                 k -> k,
                 (k1, k2) -> k1.getWeight() > k2.getWeight() ? k1 : k2
         ));
@@ -280,7 +332,7 @@ public class AIServiceImpl implements AIService {
     @Override
     public FinancialAdviceVo getFinancialAdvice(Long userId) {
         FinancialAdviceVo vo = new FinancialAdviceVo();
-        LocalDate now = LocalDate.now();
+        LocalDate now = LocalDate.now(DEFAULT_ZONE);
         
         // 1. 获取当月分类支出统计数据
         List<Map<String, Object>> stats = billMapper.getCategoryExpenseByMonth(userId, now.getYear(), now.getMonthValue());
@@ -381,40 +433,39 @@ public class AIServiceImpl implements AIService {
     /**
      * 处理单个文本片段，提取交易信息
      * 
-     * @param segment 文本片段
-     * @param categories 主分类列表
-     * @param subCategories 子分类列表
-     * @param forcedTime 强制指定的时间（若非空，则直接使用）
+     * @param ctx 文本处理上下文
+     * @param classCtx 分类索引上下文
+     * @param referenceTime 统一基准参考时间
      * @param keywordMap 预加载的关键词映射
      * @return 解析后的交易记录 VO
      */
-    private AnalyzedTransactionVo processSegment(String segment, List<Category> categories, List<SubCategory> subCategories, LocalDateTime forcedTime, Map<String, CategoryKeyword> keywordMap) {
+    private AnalyzedTransactionVo processSegment(SegmentContext ctx, ClassificationContext classCtx, LocalDateTime referenceTime, Map<String, CategoryKeyword> keywordMap) {
         AnalyzedTransactionVo tx = new AnalyzedTransactionVo();
-        tx.setOriginalText(segment);
+        tx.setOriginalText(ctx.segment);
         tx.setType(1); // 默认为支出
         tx.setIsExpected(false);
         tx.setSource("RAW");
 
         // 提取金额信息
-        String amountStr = extractAmount(segment, tx);
+        String amountStr = extractAmount(ctx.segment, tx);
         
         // 优化：从文本中移除识别出的金额部分，避免干扰 Natty 时间解析 (如 "9.9" 导致解析错误)
-        String timeParsingText = segment;
+        String timeParsingText = ctx.segment;
         if (amountStr != null) {
-            timeParsingText = segment.replace(amountStr, "").trim();
+            timeParsingText = ctx.segment.replace(amountStr, "").trim();
             if (timeParsingText.isEmpty()) {
-                timeParsingText = segment;
+                timeParsingText = ctx.segment;
             }
         }
         
         // 提取时间信息
-        extractTime(timeParsingText, tx, forcedTime);
+        extractTime(timeParsingText, tx, referenceTime);
         // 提取描述和意图
-        extractDescriptionAndIntent(segment, tx);
+        extractDescriptionAndIntent(ctx, tx);
         // 提取类型和订单号
-        extractTypeAndOrderNumber(segment, tx);
+        extractTypeAndOrderNumber(ctx.segment, tx);
         // 分类交易
-        classifyTransaction(tx, categories, subCategories, keywordMap);
+        classifyTransaction(ctx, tx, classCtx, keywordMap);
 
         return tx;
     }
@@ -439,8 +490,10 @@ public class AIServiceImpl implements AIService {
         if (text.matches(".*(退款|收入|工资|转账|入账|进账).*")) {
             tx.setType(2); // 收入
         }
-        // 如果前面没有被标记为预期，这里再次检查
-        if (!Boolean.TRUE.equals(tx.getIsExpected()) && text.matches(".*(预计|计划|打算|将来|下个月|下周|明天|后天).*")) {
+        
+        // 补充检查：通过全文关键词判断是否为预期交易（作为分词匹配的补充）
+        if (!Boolean.TRUE.equals(tx.getIsExpected()) && 
+            text.matches(".*(预计|计划|打算|将来|下个月|下月|下周|明天|后天|预备|准备|想要|想买|想喝|想吃|要去|将要|即将|明年|今晚|稍后|一会儿|待会|过后|之后).*")) {
             tx.setIsExpected(true);
         }
     }
@@ -456,20 +509,72 @@ public class AIServiceImpl implements AIService {
 
         // 1. 预加载可能存在的账单，减少循环中的数据库查询次数
         Map<String, Bill> orderNumberMap = prefetchBillsByOrderNumbers(userId, transactions);
-        // 对于按金额和备注匹配的情况，由于需要模糊匹配且组合较多，维持原有按需查询或采用更复杂的缓存
         
+        // 分离不同类型的交易进行批量处理
+        List<BillBo> billsToCreate = new ArrayList<>();
+        List<ExpectedExpenseBo> expectedExpensesToCreate = new ArrayList<>();
+
         for (AnalyzedTransactionVo tx : transactions) {
             try {
-                if (tx.getType() != null && tx.getType() == 2) { // Income
+                if (tx.getType() != null && tx.getType() == 2) { // Income (通常较少，且涉及更新逻辑，维持单笔处理)
                     processIncomeTransaction(userId, tx, createdObjects, orderNumberMap);
                 } else { // Expense (Default or Type 1)
-                    processExpenseTransaction(userId, tx, createdObjects);
+                    if (tx.getAmount() == null || tx.getAmount().compareTo(BigDecimal.ZERO) <= 0 || tx.getCategoryId() == null) {
+                        continue;
+                    }
+                    if (Boolean.TRUE.equals(tx.getIsExpected())) {
+                        expectedExpensesToCreate.add(convertToExpectedExpenseBo(userId, tx));
+                    } else {
+                        billsToCreate.add(convertToBillBo(tx, 1));
+                    }
                 }
             } catch (Exception e) {
                 log.error("Error processing transaction: {}", tx, e);
             }
         }
+
+        // 2. 批量创建支出账单
+        if (!billsToCreate.isEmpty()) {
+            try {
+                createdObjects.addAll(billService.createBills(billsToCreate));
+            } catch (Exception e) {
+                log.error("批量创建账单失败，尝试逐笔创建", e);
+                for (BillBo bo : billsToCreate) {
+                    try { createdObjects.add(billService.createBill(bo)); } catch (Exception ignored) {}
+                }
+            }
+        }
+
+        // 3. 批量创建预计支出
+        if (!expectedExpensesToCreate.isEmpty()) {
+            for (ExpectedExpenseBo bo : expectedExpensesToCreate) {
+                try {
+                    createdObjects.add(expectedExpenseService.create(bo));
+                } catch (Exception e) {
+                    log.error("创建预计支出失败: {}", bo, e);
+                }
+            }
+        }
+
         return createdObjects;
+    }
+
+    private ExpectedExpenseBo convertToExpectedExpenseBo(Long userId, AnalyzedTransactionVo tx) {
+        String remark = tx.getRemark();
+        if (StringUtils.hasText(tx.getMerchant())) {
+            remark = (StringUtils.hasText(remark) ? tx.getMerchant() + " | " + remark : tx.getMerchant());
+        }
+        
+        LocalDateTime time = tx.getTransactionTime() != null ? tx.getTransactionTime() : LocalDateTime.now(DEFAULT_ZONE);
+        
+        return new ExpectedExpenseBo()
+                .setUserId(userId)
+                .setAmount(tx.getAmount())
+                .setCategoryId(tx.getCategoryId())
+                .setSubCategoryId(tx.getSubCategoryId())
+                .setRemark(remark)
+                .setDueDate(Date.from(time.atZone(DEFAULT_ZONE).toInstant()))
+                .setStatus(1);
     }
 
     private Map<String, Bill> prefetchBillsByOrderNumbers(Long userId, List<AnalyzedTransactionVo> transactions) {
@@ -556,7 +661,7 @@ public class AIServiceImpl implements AIService {
     
     @NotNull
     private BillBo convertToBillBo(AnalyzedTransactionVo tx, int type) {
-        LocalDateTime time = tx.getTransactionTime() != null ? tx.getTransactionTime() : LocalDateTime.now();
+        LocalDateTime time = tx.getTransactionTime() != null ? tx.getTransactionTime() : LocalDateTime.now(DEFAULT_ZONE);
         return new BillBo()
                 .setOriginalAmount(tx.getAmount())
                 .setType(type)
@@ -565,35 +670,7 @@ public class AIServiceImpl implements AIService {
                 .setCategoryId(tx.getCategoryId())
                 .setSubCategoryId(tx.getSubCategoryId())
                 .setOrderNumber(tx.getOrderNumber())
-                .setBillTime(Date.from(time.atZone(ZoneId.systemDefault()).toInstant()));
-    }
-    
-    private void processExpenseTransaction(Long userId, AnalyzedTransactionVo tx, List<Object> createdObjects) {
-        if (tx.getAmount() == null || tx.getAmount().compareTo(BigDecimal.ZERO) <= 0 || tx.getCategoryId() == null) {
-            return;
-        }
-
-        if (Boolean.TRUE.equals(tx.getIsExpected())) {
-            String remark = tx.getRemark();
-            if (StringUtils.hasText(tx.getMerchant())) {
-                remark = (StringUtils.hasText(remark) ? tx.getMerchant() + " | " + remark : tx.getMerchant());
-            }
-            
-            LocalDateTime time = tx.getTransactionTime() != null ? tx.getTransactionTime() : LocalDateTime.now();
-            
-            ExpectedExpenseBo bo = new ExpectedExpenseBo()
-                    .setUserId(userId)
-                    .setAmount(tx.getAmount())
-                    .setCategoryId(tx.getCategoryId())
-                    .setSubCategoryId(tx.getSubCategoryId())
-                    .setRemark(remark)
-                    .setDueDate(Date.from(time.atZone(ZoneId.systemDefault()).toInstant()))
-                    .setStatus(1);
-            
-            createdObjects.add(expectedExpenseService.create(bo));
-        } else {
-            createdObjects.add(billService.createBill(convertToBillBo(tx, 1)));
-        }
+                .setBillTime(Date.from(time.atZone(DEFAULT_ZONE).toInstant()));
     }
 
     /**
@@ -623,23 +700,15 @@ public class AIServiceImpl implements AIService {
      * 
      * @param text 原始文本
      * @param tx 交易记录VO
-     * @param forcedTime 强制指定的时间（若非空，则直接使用）
+     * @param referenceTime 统一基准参考时间
      */
-    private void extractTime(String text, AnalyzedTransactionVo tx, LocalDateTime forcedTime) {
-        if (forcedTime != null) {
-            tx.setTransactionTime(forcedTime);
-            return;
-        }
+    private void extractTime(String text, AnalyzedTransactionVo tx, LocalDateTime referenceTime) {
+        // 使用 TimeProcessor 进行自然语言时间解析，优先从文本提取，并以 referenceTime 为基准
+        LocalDateTime parsedTime = TimeProcessor.parseNaturalLanguage(text, referenceTime);
 
-        // 使用 TimeProcessor 进行自然语言时间解析
-        LocalDateTime parsedTime = TimeProcessor.parseNaturalLanguage(text);
-
-        // 如果仍未解析出时间，记录日志并使用默认时间NOW
+        // 如果文本中没有提取到任何时间信息，则回退到使用 referenceTime
         if (parsedTime == null) {
-            // 记录无法识别的时间描述
-            log.warn("无法识别时间描述：{}", text);
-            // 默认设为当前时间
-            parsedTime = LocalDateTime.now();
+            parsedTime = referenceTime;
         }
 
         tx.setTransactionTime(parsedTime);
@@ -649,18 +718,18 @@ public class AIServiceImpl implements AIService {
      * 提取描述信息、商户信息和判断是否为预期交易
      * 优化：利用 HanLP 的词性分析区分商户（如“瑞幸” - nz/ni）和备注（如“午饭” - n）
      *
-     * @param text 原始文本
+     * @param ctx 文本处理上下文
      * @param tx 交易记录VO
      */
-    private void extractDescriptionAndIntent(String text, AnalyzedTransactionVo tx) {
-        // 使用HanLP进行分词及词性标注
-        List<Term> terms = HanLP.segment(text);
+    private void extractDescriptionAndIntent(SegmentContext ctx, AnalyzedTransactionVo tx) {
+        // 使用预分词结果
+        List<Term> terms = ctx.terms;
         StringBuilder remarkBuilder = new StringBuilder();
         StringBuilder merchant = new StringBuilder();
         boolean isExpected = false;
 
         if (tx.getTransactionTime() != null) {
-            if (tx.getTransactionTime().isAfter(LocalDateTime.now())) {
+            if (tx.getTransactionTime().isAfter(LocalDateTime.now(DEFAULT_ZONE))) {
                 isExpected = true;
             }
         }
@@ -671,7 +740,7 @@ public class AIServiceImpl implements AIService {
             String nature = term.nature.toString(); // 词性
 
             // 1. 判断是否包含预期交易关键词
-            if (word.matches(".*(打算|预计|计划|预备|准备|想要|想买|想喝|想吃|要去|将要|即将|明天|后天|下周|下月|明年|今晚|稍后|一会儿|待会|过后|之后).*")) {
+            if (word.matches(".*(打算|预计|计划|预备|准备|想要|想买|想喝|想吃|要去|将要|即将|明天|后天|下周|下个月|下月|明年|今晚|稍后|一会儿|待会|过后|之后).*")) {
                 isExpected = true;
             }
 
@@ -700,12 +769,12 @@ public class AIServiceImpl implements AIService {
     /**
      * 对交易进行分类
      * 
+     * @param ctx 文本处理上下文
      * @param tx 交易记录VO
-     * @param categories 所有主分类
-     * @param subCategories 所有子分类
+     * @param classCtx 分类索引上下文
      * @param keywordMap 预加载的关键词映射
      */
-    private void classifyTransaction(AnalyzedTransactionVo tx, List<Category> categories, List<SubCategory> subCategories, Map<String, CategoryKeyword> keywordMap) {
+    private void classifyTransaction(SegmentContext ctx, AnalyzedTransactionVo tx, ClassificationContext classCtx, Map<String, CategoryKeyword> keywordMap) {
         String remark = tx.getRemark();
         String merchant = tx.getMerchant();
         
@@ -714,24 +783,20 @@ public class AIServiceImpl implements AIService {
                            (StringUtils.hasText(merchant) ? " " + merchant : "");
         searchText = searchText.trim();
         
-        if (!StringUtils.hasText(searchText)) {
-            return;
-        }
-
-        // 1. 优先使用本地关键词映射进行匹配（这是最精确的匹配方式）
-        List<Term> terms = HanLP.segment(searchText);
-        List<String> tokens = terms.stream().map(t -> t.word).toList();
+        // 1. 优先使用本地关键词映射进行匹配（精确匹配 tokens）
+        // 使用预分词结果
+        List<String> tokens = ctx.tokens;
         
         if (!tokens.isEmpty()) {
             List<CategoryKeyword> matches = tokens.stream()
                 .map(keywordMap::get)
                 .filter(Objects::nonNull)
                 .sorted(Comparator.comparingInt(CategoryKeyword::getWeight).reversed())
-                .toList();
+                .collect(Collectors.toList());
                     
             if (!matches.isEmpty()) {
                 CategoryKeyword match = matches.get(0);
-                fillCategoryInfo(tx, match, categories, subCategories);
+                fillCategoryInfo(tx, match, classCtx.categories, classCtx.subCategories);
                 tx.setSource("KEYWORD_DB");
                 // 本地识别成功后，简单优化商户/备注：如果匹配的关键词在备注中，且商户为空，则将其移动到商户
                 refineLocalExtraction(tx, match.getKeyword());
@@ -739,44 +804,46 @@ public class AIServiceImpl implements AIService {
             }
         }
         
-        // 2. 其次匹配子分类名称
-        String finalSearchText = searchText;
-        Optional<SubCategory> subMatch = subCategories.stream()
-                .filter(sc -> finalSearchText.contains(sc.getName()))
-                .findFirst();
-        
-        if (subMatch.isPresent()) {
-            tx.setSubCategoryId(subMatch.get().getId());
-            tx.setSubCategoryName(subMatch.get().getName());
-            tx.setCategoryId(subMatch.get().getCategoryId());
-            categories.stream().filter(c -> c.getId().equals(subMatch.get().getCategoryId()))
-                    .findFirst().ifPresent(c -> tx.setCategoryName(c.getName()));
-            tx.setSource("DIRECT_MATCH_SUB");
-            refineLocalExtraction(tx, subMatch.get().getName());
+        if (!StringUtils.hasText(searchText)) {
             return;
         }
+
+        // 2. 其次匹配子分类名称（不区分大小写）
+        String lowerSearchText = searchText.toLowerCase();
         
-        // 3. 再次匹配主分类名称
-        Optional<Category> catMatch = categories.stream()
-                .filter(c -> !"其他".equals(c.getName()) && finalSearchText.contains(c.getName()))
-                .findFirst();
-        
-        if (catMatch.isPresent()) {
-            tx.setCategoryId(catMatch.get().getId());
-            tx.setCategoryName(catMatch.get().getName());
-            tx.setSource("DIRECT_MATCH");
-            refineLocalExtraction(tx, catMatch.get().getName());
-            return;
+        // 尝试在搜索文本的 tokens 中直接匹配子分类名称
+        for (String token : tokens) {
+            SubCategory sc = classCtx.subCategoryByName.get(token);
+            if (sc != null) {
+                tx.setSubCategoryId(sc.getId());
+                tx.setSubCategoryName(sc.getName());
+                tx.setCategoryId(sc.getCategoryId());
+                Category c = classCtx.categoryByName.get(classCtx.categories.stream()
+                        .filter(cat -> cat.getId().equals(sc.getCategoryId()))
+                        .map(Category::getName).findFirst().orElse("").toLowerCase());
+                if (c != null) tx.setCategoryName(c.getName());
+                
+                tx.setSource("DIRECT_MATCH_SUB_TOKEN");
+                refineLocalExtraction(tx, sc.getName());
+                return;
+            }
+        }
+
+        // 3. 再次匹配主分类名称（不区分大小写）
+        for (String token : tokens) {
+            Category c = classCtx.categoryByName.get(token);
+            if (c != null && !"其他".equals(c.getName())) {
+                tx.setCategoryId(c.getId());
+                tx.setCategoryName(c.getName());
+                tx.setSource("DIRECT_MATCH_CAT_TOKEN");
+                refineLocalExtraction(tx, c.getName());
+                return;
+            }
         }
 
         // 4. 本地匹配失败后，使用 AI 智能分类和商户/备注分析
         try {
-            // 构建分类名称列表
-            List<String> categoryNames = new ArrayList<>();
-            categories.forEach(c -> categoryNames.add(c.getName()));
-            subCategories.forEach(sc -> categoryNames.add(sc.getName()));
-
-            JSONObject aiResultObj = qwenUtil.classifyWithTime(searchText, categoryNames);
+            JSONObject aiResultObj = qwenUtil.classifyWithTime(searchText, classCtx.allCategoryNames);
             if (aiResultObj != null) {
                 String aiCategory = aiResultObj.getString("category");
                 String aiDate = aiResultObj.getString("date");
@@ -803,26 +870,52 @@ public class AIServiceImpl implements AIService {
                 }
 
                 if (StringUtils.hasText(aiCategory)) {
-                     // 查找匹配的子分类或主分类（AI 返回的可能是名称）
-                     Optional<SubCategory> aiSubMatch = subCategories.stream()
-                             .filter(sc -> sc.getName().equals(aiCategory)).findFirst();
-                     if (aiSubMatch.isPresent()) {
-                         tx.setSubCategoryId(aiSubMatch.get().getId());
-                         tx.setSubCategoryName(aiSubMatch.get().getName());
-                         tx.setCategoryId(aiSubMatch.get().getCategoryId());
-                         categories.stream().filter(c -> c.getId().equals(aiSubMatch.get().getCategoryId()))
-                                 .findFirst().ifPresent(c -> tx.setCategoryName(c.getName()));
-                         saveNewKeyword(tx.getRemark(), aiSubMatch.get().getId(), aiSubMatch.get().getCategoryId());
+                     // 查找匹配的子分类或主分类（AI 返回的可能是名称，支持模糊/归一化匹配）
+                     String normalizedAiCategory = aiCategory.replaceAll("\\s+", "").toLowerCase();
+                     
+                     SubCategory aiSubMatch = classCtx.subCategoryByName.get(normalizedAiCategory);
+                     if (aiSubMatch != null) {
+                         tx.setSubCategoryId(aiSubMatch.getId());
+                         tx.setSubCategoryName(aiSubMatch.getName());
+                         tx.setCategoryId(aiSubMatch.getCategoryId());
+                         Category c = classCtx.categoryByName.get(classCtx.categories.stream()
+                                 .filter(cat -> cat.getId().equals(aiSubMatch.getCategoryId()))
+                                 .map(Category::getName).findFirst().orElse("").toLowerCase());
+                         if (c != null) tx.setCategoryName(c.getName());
+                         
+                         // 学习新关键词
+                         String learningKeyword = StringUtils.hasText(aiMerchant) ? aiMerchant : (StringUtils.hasText(aiRemark) ? aiRemark : tx.getRemark());
+                         saveNewKeyword(learningKeyword, aiSubMatch.getId(), aiSubMatch.getCategoryId());
+                         
+                         // 在备注中添加AI标识
+                         String currentRemark = tx.getRemark();
+                         if (StringUtils.hasText(currentRemark)) {
+                             tx.setRemark(currentRemark + " [AI_QWEN]");
+                         } else {
+                             tx.setRemark("[AI_QWEN]");
+                         }
+                         
                          tx.setSource("AI_QWEN_SUB");
                          return;
                      }
                      
-                     Optional<Category> aiCatMatch = categories.stream()
-                             .filter(c -> c.getName().equals(aiCategory)).findFirst();
-                     if (aiCatMatch.isPresent()) {
-                         tx.setCategoryId(aiCatMatch.get().getId());
-                         tx.setCategoryName(aiCatMatch.get().getName());
-                         saveNewKeyword(tx.getRemark(), null, aiCatMatch.get().getId());
+                     Category aiCatMatch = classCtx.categoryByName.get(normalizedAiCategory);
+                     if (aiCatMatch != null) {
+                         tx.setCategoryId(aiCatMatch.getId());
+                         tx.setCategoryName(aiCatMatch.getName());
+                         
+                         // 学习新关键词
+                         String learningKeyword = StringUtils.hasText(aiMerchant) ? aiMerchant : (StringUtils.hasText(aiRemark) ? aiRemark : tx.getRemark());
+                         saveNewKeyword(learningKeyword, null, aiCatMatch.getId());
+                         
+                         // 在备注中添加AI标识
+                         String currentRemark = tx.getRemark();
+                         if (StringUtils.hasText(currentRemark)) {
+                             tx.setRemark(currentRemark + " [AI_QWEN]");
+                         } else {
+                             tx.setRemark("[AI_QWEN]");
+                         }
+                         
                          tx.setSource("AI_QWEN");
                          return;
                      }
@@ -835,9 +928,8 @@ public class AIServiceImpl implements AIService {
         // 5. 回退到默认分类"其他"
         tx.setCategoryName("其他");
         tx.setSource("FALLBACK");
-        Optional<Category> otherCat = categories.stream()
-                .filter(c -> "其他".equals(c.getName())).findFirst();
-        otherCat.ifPresent(category -> tx.setCategoryId(category.getId()));
+        Category otherCat = classCtx.categoryByName.get("其他");
+        if (otherCat != null) tx.setCategoryId(otherCat.getId());
     }
 
     /**
@@ -890,20 +982,26 @@ public class AIServiceImpl implements AIService {
      * @param catId 主分类ID
      */
     private void saveNewKeyword(String keyword, Long subId, Long catId) {
+        if (!StringUtils.hasText(keyword) || keyword.length() < 2 || keyword.length() > 20) {
+            return; // 过滤掉太短或太长的关键词，避免脏数据
+        }
+        
         // 异步保存，避免阻塞主线程
         CompletableFuture.runAsync(() -> {
             try {
-                // 检查关键词是否已存在
+                // 检查关键词是否已存在（忽略大小写）
+                String lowerKeyword = keyword.trim().toLowerCase();
                 QueryWrapper<CategoryKeyword> check = new QueryWrapper<>();
-                check.eq("keyword", keyword);
+                check.apply("LOWER(keyword) = {0}", lowerKeyword);
+                
                 if (categoryKeywordMapper.selectCount(check) == 0) {
                     // 创建新的关键词记录
                     CategoryKeyword newKw = new CategoryKeyword();
-                    newKw.setKeyword(keyword);
+                    newKw.setKeyword(keyword.trim());
                     newKw.setCategoryId(catId);
                     newKw.setSubCategoryId(subId);
                     newKw.setType(subId != null ? 2 : 1); // 1为主分类，2为子分类
-                    newKw.setMatchValue(keyword);
+                    newKw.setMatchValue(keyword.trim());
                     newKw.setWeight(10); // 默认权重
                     newKw.setUserId(0L); // 系统用户
                     categoryKeywordMapper.insert(newKw);

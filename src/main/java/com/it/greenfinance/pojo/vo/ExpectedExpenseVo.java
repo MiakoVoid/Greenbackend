@@ -75,6 +75,16 @@ public class ExpectedExpenseVo implements Serializable {
     private Date updateTime;
     
     /**
+     * 主分类名称
+     */
+    private String categoryName;
+    
+    /**
+     * 子分类名称
+     */
+    private String subCategoryName;
+    
+    /**
      * 图标标识符
      */
     private String categoryIcon;

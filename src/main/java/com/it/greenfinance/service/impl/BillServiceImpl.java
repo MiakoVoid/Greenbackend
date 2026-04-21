@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -255,8 +256,9 @@ public class BillServiceImpl extends ServiceImpl<BillMapper, Bill> implements Bi
     public Map<String, BigDecimal> getBillStatistics() {
     // 获取当前用户 ID
         Long userId = userContextUtil.getCurrentUserId();
-    // 获取当前日期
-        LocalDate today = LocalDate.now();
+    // 获取当前日期（使用中国大陆时区）
+        ZoneId zone = ZoneId.of("Asia/Shanghai");
+        LocalDate today = LocalDate.now(zone);
         
     // 创建用于存储统计结果的 Map
         Map<String, BigDecimal> statistics = new HashMap<>();
@@ -518,8 +520,7 @@ public class BillServiceImpl extends ServiceImpl<BillMapper, Bill> implements Bi
             firstDayOfMonth = LocalDate.of(currentDate.getYear(), currentDate.getMonthValue(), 1);
         }
         
-        LocalDate lastDayOfMonth = firstDayOfMonth.plusMonths(1).minusDays(1);
-        return lastDayOfMonth;
+        return firstDayOfMonth.plusMonths(1).minusDays(1);
     }
     
     /**

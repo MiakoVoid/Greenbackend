@@ -27,15 +27,14 @@
       </jdbc-additional-properties>
       <working-dir>$ProjectFileDir$</working-dir>
     </data-source>
-    <data-source source="LOCAL" name="云端" uuid="be107144-f5b5-4520-b8a4-4d0bf0d4d0df">
+    <data-source source="LOCAL" name="@dbprovider.ap-northeast-1.clawcloudrun.com" uuid="c29cb883-beb7-4713-b949-50d57afbeead">
       <driver-ref>mysql.8</driver-ref>
       <synchronize>true</synchronize>
       <jdbc-driver>com.mysql.cj.jdbc.Driver</jdbc-driver>
-      <jdbc-url>jdbc:mysql://dbprovider.us-east-1.clawcloudrun.com:45737/</jdbc-url>
+      <jdbc-url>jdbc:mysql://dbprovider.ap-northeast-1.clawcloudrun.com:45896</jdbc-url>
       <jdbc-additional-properties>
         <property name="com.intellij.clouds.kubernetes.db.host.port" />
         <property name="com.intellij.clouds.kubernetes.db.enabled" value="false" />
-        <property name="com.intellij.clouds.kubernetes.db.resource.type" value="Deployment" />
         <property name="com.intellij.clouds.kubernetes.db.container.port" />
       </jdbc-additional-properties>
       <working-dir>$ProjectFileDir$</working-dir>

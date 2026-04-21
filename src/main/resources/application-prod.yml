@@ -29,11 +29,10 @@ crypto:
   secret: ${CRYPTO_SECRET}
 
 ai:
-  model-type: ${AI_MODEL_TYPE:OpenAI}
   model-enabled: ${AI_MODEL_ENABLED:true}
   model-api-url: ${AI_MODEL_API_URL}
   model-api-key: ${AI_API_KEY}
   model-id: ${AI_MODEL_ID:Qwen/Qwen3-4B}
-  stream-enabled: ${AI_STREAM_ENABLED:false}
+  stream-enabled: ${AI_STREAM_ENABLED:true}
   ocr-enabled: ${AI_OCR_ENABLED:true}
   advice-enabled: ${AI_ADVICE_ENABLED:true}

@@ -1,107 +1,161 @@
--- 先清空表数据（若需要，首次执行可保留，后续更新注释掉）
--- TRUNCATE TABLE sub_category;
--- TRUNCATE TABLE category;
+-- ====================================================
+-- 清理原有分类数据（请谨慎执行，确保已备份）
+-- ====================================================
+SET FOREIGN_KEY_CHECKS = 0;
+TRUNCATE TABLE greenfinance.sub_category;
+TRUNCATE TABLE greenfinance.category;
+SET FOREIGN_KEY_CHECKS = 1;
 
-use `greenfinance`;
--- 插入支出类主分类（type=1）
-INSERT INTO `category` (`user_id`, `name`, `category_Icon`, `type`, `sort_order`) VALUES
-                                                                                        (NULL, '餐饮', 'res:restaurant', 1, 1),
-                                                                                        (NULL, '交通', 'res:commute', 1, 2),
-                                                                                        (NULL, '住房', 'res:home', 1, 3),
-                                                                                        (NULL, '购物', 'res:shopping_cart', 1, 4),
-                                                                                        (NULL, '娱乐', 'res:movie', 1, 5),
-                                                                                        (NULL, '医疗健康', 'res:medical_services', 1, 6),
-                                                                                        (NULL, '教育', 'res:school', 1, 7),
-                                                                                        (NULL, '人情往来', 'res:card_giftcard', 1, 8),
-                                                                                        (NULL, '其他支出', 'res:money_off', 1, 9);
+-- ====================================================
+-- 1. 插入主分类 (支出 1-11, 收入 20-27)
+-- ====================================================
+INSERT INTO greenfinance.category (id, user_id, name, category_Icon, type, sort_order, create_time, update_time) VALUES
+-- 支出
+(1, null, '餐饮', 'res:ic_category_food', 1, 1, NOW(), NOW()),
+(2, null, '交通', 'res:ic_category_transport', 1, 2, NOW(), NOW()),
+(3, null, '购物', 'res:ic_category_shopping', 1, 3, NOW(), NOW()),
+(4, null, '娱乐', 'res:ic_category_entertainment', 1, 4, NOW(), NOW()),
+(5, null, '医疗', 'res:ic_category_medical', 1, 5, NOW(), NOW()),
+(6, null, '教育', 'res:ic_category_education', 1, 6, NOW(), NOW()),
+(7, null, '居家', 'res:ic_category_housing', 1, 7, NOW(), NOW()),
+(8, null, '通讯', 'res:ic_category_communication', 1, 8, NOW(), NOW()),
+(9, null, '宠物', 'res:ic_category_pet', 1, 9, NOW(), NOW()),
+(10, null, '人情', 'res:ic_category_gift', 1, 10, NOW(), NOW()),
+(11, null, '其他', 'res:ic_category_other', 1, 11, NOW(), NOW()),
 
--- 插入收入类主分类（type=2）
-INSERT INTO `category` (`user_id`, `name`, `category_Icon`, `type`, `sort_order`) VALUES
-                                                                                        (NULL, '工资', 'res:work', 2, 1),
-                                                                                        (NULL, '理财收益', 'res:account_balance', 2, 2),
-                                                                                        (NULL, '兼职收入', 'res:assignment', 2, 3),
-                                                                                        (NULL, '礼金红包', 'res:monetization_on', 2, 4),
-                                                                                        (NULL, '其他收入', 'res:attach_money', 2, 5);
+-- 收入
+(20, null, '工资', 'res:ic_category_salary', 2, 20, NOW(), NOW()),
+(21, null, '奖金', 'res:ic_category_bonus', 2, 21, NOW(), NOW()),
+(22, null, '投资', 'res:ic_category_investment', 2, 22, NOW(), NOW()),
+(23, null, '兼职', 'res:ic_category_parttime', 2, 23, NOW(), NOW()),
+(24, null, '退款', 'res:ic_category_refund', 2, 24, NOW(), NOW()),
+(25, null, '人情', 'res:ic_category_gift', 2, 25, NOW(), NOW()),
+(26, null, '生活费', 'res:ic_category_living_allowance', 2, 26, NOW(), NOW()),
+(27, null, '其他', 'res:ic_category_other', 2, 27, NOW(), NOW());
 
--- 插入子分类（关联主分类ID，继承或自定义图标）
--- 餐饮子分类（主分类ID=1）
-INSERT INTO `sub_category` (`category_id`, `user_id`, `name`, `category_Icon`, `sort_order`) VALUES
-                                                                                                   (1, NULL, '早餐', NULL, 1), -- 继承主分类图标
-                                                                                                   (1, NULL, '午餐', NULL, 2),
-                                                                                                   (1, NULL, '晚餐', NULL, 3),
-                                                                                                   (1, NULL, '零食饮料', 'res:local_cafe', 4);
+-- ====================================================
+-- 2. 插入子分类
+-- ====================================================
 
--- 交通子分类（主分类ID=2）
-INSERT INTO `sub_category` (`category_id`, `user_id`, `name`, `category_Icon`, `sort_order`) VALUES
-                                                                                                   (2, NULL, '公交地铁', 'res:directions_bus', 1),
-                                                                                                   (2, NULL, '打车', 'res:local_taxi', 2),
-                                                                                                   (2, NULL, '加油', 'res:local_gas_station', 3),
-                                                                                                   (2, NULL, '停车费', 'res:local_parking', 4);
+-- 餐饮 (1)
+INSERT INTO greenfinance.sub_category (id, category_id, user_id, name, category_Icon, sort_order, create_time, update_time) VALUES
+                                                                                                                                (101, 1, null, '早餐', 'res:ic_sub_category_breakfast', 1, NOW(), NOW()),
+                                                                                                                                (102, 1, null, '午餐', 'res:ic_sub_category_lunch', 2, NOW(), NOW()),
+                                                                                                                                (103, 1, null, '晚餐', 'res:ic_sub_category_dinner', 3, NOW(), NOW()),
+                                                                                                                                (104, 1, null, '快餐', 'res:ic_sub_category_fastfood', 4, NOW(), NOW()),
+                                                                                                                                (105, 1, null, '外卖', 'res:ic_sub_category_takeout', 5, NOW(), NOW()),
+                                                                                                                                (106, 1, null, '零食', 'res:ic_sub_category_snack', 6, NOW(), NOW()),
+                                                                                                                                (107, 1, null, '水果', 'res:ic_sub_category_fruit', 7, NOW(), NOW()),
+                                                                                                                                (108, 1, null, '饮品', 'res:ic_sub_category_drink', 8, NOW(), NOW()),
+                                                                                                                                (109, 1, null, '咖啡', 'res:ic_sub_category_coffee', 9, NOW(), NOW()),
+                                                                                                                                (110, 1, null, '奶茶', 'res:ic_sub_category_milk_tea', 10, NOW(), NOW()),
+                                                                                                                                (111, 1, null, '甜点', 'res:ic_sub_category_dessert', 11, NOW(), NOW());
 
--- 住房子分类（主分类ID=3）
-INSERT INTO `sub_category` (`category_id`, `user_id`, `name`, `category_Icon`, `sort_order`) VALUES
-                                                                                                   (3, NULL, '房租', NULL, 1), -- 继承主分类图标
-                                                                                                   (3, NULL, '水电煤', 'res:water_drop', 2), -- 水图标（电可用res:electric_bolt，这里统一用水图标）
-                                                                                                   (3, NULL, '物业费', NULL, 3);
+-- 交通 (2)
+INSERT INTO greenfinance.sub_category (id, category_id, user_id, name, category_Icon, sort_order, create_time, update_time) VALUES
+                                                                                                                                (201, 2, null, '公共交通', 'res:ic_sub_category_public_transport', 1, NOW(), NOW()),
+                                                                                                                                (202, 2, null, '打车', 'res:ic_sub_category_taxi', 2, NOW(), NOW()),
+                                                                                                                                (203, 2, null, '停车', 'res:ic_sub_category_parking', 3, NOW(), NOW()),
+                                                                                                                                (204, 2, null, '加油充电', 'res:ic_sub_category_maintenance', 4, NOW(), NOW()),
+                                                                                                                                (205, 2, null, '保养维修', 'res:ic_sub_category_repair', 5, NOW(), NOW());
 
--- 购物子分类（主分类ID=4）
-INSERT INTO `sub_category` (`category_id`, `user_id`, `name`, `category_Icon`, `sort_order`) VALUES
-                                                                                                   (4, NULL, '服饰鞋包', 'res:checkroom', 1),
-                                                                                                   (4, NULL, '日用品', 'res:cleaning_services', 2),
-                                                                                                   (4, NULL, '数码家电', 'res:devices', 3);
+-- 购物 (3)
+INSERT INTO greenfinance.sub_category (id, category_id, user_id, name, category_Icon, sort_order, create_time, update_time) VALUES
+                                                                                                                                (301, 3, null, '服装鞋包', 'res:ic_sub_category_clothing', 1, NOW(), NOW()),
+                                                                                                                                (302, 3, null, '日用品', 'res:ic_sub_category_daily_necessities', 2, NOW(), NOW()),
+                                                                                                                                (303, 3, null, '电子产品', 'res:ic_sub_category_electronics', 3, NOW(), NOW()),
+                                                                                                                                (304, 3, null, '化妆品', 'res:ic_sub_category_cosmetics', 4, NOW(), NOW()),
+                                                                                                                                (305, 3, null, '家居装饰', 'res:ic_sub_category_home_decor', 5, NOW(), NOW());
 
--- 娱乐子分类（主分类ID=5）
-INSERT INTO `sub_category` (`category_id`, `user_id`, `name`, `category_Icon`, `sort_order`) VALUES
-                                                                                                   (5, NULL, '电影演出', 'res:movie', 1), -- 复用主分类图标
-                                                                                                   (5, NULL, '游戏充值', 'res:games', 2),
-                                                                                                   (5, NULL, '旅游', 'res:flight', 3);
+-- 娱乐 (4)
+INSERT INTO greenfinance.sub_category (id, category_id, user_id, name, category_Icon, sort_order, create_time, update_time) VALUES
+                                                                                                                                (401, 4, null, '电影', 'res:ic_sub_category_movie', 1, NOW(), NOW()),
+                                                                                                                                (402, 4, null, '游戏', 'res:ic_sub_category_game', 2, NOW(), NOW()),
+                                                                                                                                (403, 4, null, '运动健身', 'res:ic_sub_category_sports', 3, NOW(), NOW()),
+                                                                                                                                (404, 4, null, '旅行', 'res:ic_sub_category_travel', 4, NOW(), NOW()),
+                                                                                                                                (405, 4, null, '聚会', 'res:ic_sub_category_party', 5, NOW(), NOW()),
+                                                                                                                                (406, 4, null, '酒吧', 'res:ic_sub_category_bar', 6, NOW(), NOW());
 
--- 医疗健康子分类（主分类ID=6）
-INSERT INTO `sub_category` (`category_id`, `user_id`, `name`, `category_Icon`, `sort_order`) VALUES
-                                                                                                   (6, NULL, '药店买药', NULL, 1), -- 继承主分类图标
-                                                                                                   (6, NULL, '医院诊疗', 'res:local_hospital', 2),
-                                                                                                   (6, NULL, '健身', 'res:fitness_center', 3);
+-- 医疗 (5)
+INSERT INTO greenfinance.sub_category (id, category_id, user_id, name, category_Icon, sort_order, create_time, update_time) VALUES
+                                                                                                                                (501, 5, null, '药品', 'res:ic_sub_category_medicine', 1, NOW(), NOW()),
+                                                                                                                                (502, 5, null, '诊疗', 'res:ic_sub_category_treatment', 2, NOW(), NOW()),
+                                                                                                                                (503, 5, null, '体检', 'res:ic_sub_category_checkup', 3, NOW(), NOW());
 
--- 教育子分类（主分类ID=7）
-INSERT INTO `sub_category` (`category_id`, `user_id`, `name`, `category_Icon`, `sort_order`) VALUES
-                                                                                                   (7, NULL, '书籍', 'res:menu_book', 1),
-                                                                                                   (7, NULL, '培训课程', 'res:class', 2),
-                                                                                                   (7, NULL, '学费', NULL, 3); -- 继承主分类图标
+-- 教育 (6)
+INSERT INTO greenfinance.sub_category (id, category_id, user_id, name, category_Icon, sort_order, create_time, update_time) VALUES
+                                                                                                                                (601, 6, null, '学费', 'res:ic_sub_category_tuition', 1, NOW(), NOW()),
+                                                                                                                                (602, 6, null, '培训', 'res:ic_sub_category_training', 2, NOW(), NOW()),
+                                                                                                                                (603, 6, null, '书籍', 'res:ic_sub_category_books', 3, NOW(), NOW());
 
--- 人情往来子分类（主分类ID=8）
-INSERT INTO `sub_category` (`category_id`, `user_id`, `name`, `category_Icon`, `sort_order`) VALUES
-                                                                                                   (8, NULL, '红包', 'res:card_giftcard', 1), -- 复用主分类图标
-                                                                                                   (8, NULL, '礼物', NULL, 2), -- 继承主分类图标
-                                                                                                   (8, NULL, '聚餐AA', NULL, 3);
+-- 居家 (7)
+INSERT INTO greenfinance.sub_category (id, category_id, user_id, name, category_Icon, sort_order, create_time, update_time) VALUES
+                                                                                                                                (701, 7, null, '房租', 'res:ic_sub_category_rent', 1, NOW(), NOW()),
+                                                                                                                                (702, 7, null, '房贷', 'res:ic_sub_category_mortgage', 2, NOW(), NOW()),
+                                                                                                                                (703, 7, null, '水电燃气', 'res:ic_sub_category_utilities', 3, NOW(), NOW()),
+                                                                                                                                (704, 7, null, '物业', 'res:ic_sub_category_property', 4, NOW(), NOW()),
+                                                                                                                                (705, 7, null, '装修', 'res:ic_sub_category_renovation', 5, NOW(), NOW()),
+                                                                                                                                (706, 7, null, '维修', 'res:ic_sub_category_appliance', 6, NOW(), NOW()),
+                                                                                                                                (707, 7, null, '家政保洁', 'res:ic_sub_category_laundry', 7, NOW(), NOW());
 
--- 其他支出子分类（主分类ID=9）
-INSERT INTO `sub_category` (`category_id`, `user_id`, `name`, `category_Icon`, `sort_order`) VALUES
-                                                                                                   (9, NULL, '杂项', NULL, 1), -- 继承主分类图标
-                                                                                                   (9, NULL, '罚款', 'res:gavel', 2);
+-- 通讯 (8)
+INSERT INTO greenfinance.sub_category (id, category_id, user_id, name, category_Icon, sort_order, create_time, update_time) VALUES
+                                                                                                                                (801, 8, null, '话费', 'res:ic_sub_category_telecom', 1, NOW(), NOW()),
+                                                                                                                                (802, 8, null, '宽带', 'res:ic_sub_category_telecom', 2, NOW(), NOW()),
+                                                                                                                                (803, 8, null, '订阅服务', 'res:ic_sub_category_subscription', 3, NOW(), NOW());
 
--- 工资子分类（主分类ID=10）
-INSERT INTO `sub_category` (`category_id`, `user_id`, `name`, `category_Icon`, `sort_order`) VALUES
-                                                                                                   (10, NULL, '基本工资', NULL, 1), -- 继承主分类图标
-                                                                                                   (10, NULL, '奖金', 'res:card_giftcard', 2),
-                                                                                                   (10, NULL, '补贴', 'res:attach_money', 3);
+-- 宠物 (9)
+INSERT INTO greenfinance.sub_category (id, category_id, user_id, name, category_Icon, sort_order, create_time, update_time) VALUES
+                                                                                                                                (901, 9, null, '宠物食品', 'res:ic_category_pet', 1, NOW(), NOW()),
+                                                                                                                                (902, 9, null, '宠物医疗', 'res:ic_category_medical', 2, NOW(), NOW()),
+                                                                                                                                (903, 9, null, '宠物用品', 'res:ic_category_pet', 3, NOW(), NOW());
 
--- 理财收益子分类（主分类ID=11）
-INSERT INTO `sub_category` (`category_id`, `user_id`, `name`, `category_Icon`, `sort_order`) VALUES
-                                                                                                   (11, NULL, '存款利息', 'res:account_balance_wallet', 1),
-                                                                                                   (11, NULL, '基金收益', NULL, 2), -- 继承主分类图标
-                                                                                                   (11, NULL, '股票收益', 'res:trending_up', 3);
+-- 人情 (10)
+INSERT INTO greenfinance.sub_category (id, category_id, user_id, name, category_Icon, sort_order, create_time, update_time) VALUES
+                                                                                                                                (1001, 10, null, '礼金', 'res:ic_sub_category_gift_money', 1, NOW(), NOW()),
+                                                                                                                                (1002, 10, null, '请客', 'res:ic_sub_category_treat', 2, NOW(), NOW());
 
--- 兼职收入子分类（主分类ID=12）
-INSERT INTO `sub_category` (`category_id`, `user_id`, `name`, `category_Icon`, `sort_order`) VALUES
-                                                                                                   (12, NULL, '副业', NULL, 1), -- 继承主分类图标
-                                                                                                   (12, NULL, '劳务报酬', 'res:paid', 2);
+-- 其他支出 (11)
+INSERT INTO greenfinance.sub_category (id, category_id, user_id, name, category_Icon, sort_order, create_time, update_time) VALUES
+                                                                                                                                (1101, 11, null, '快递', 'res:ic_sub_category_express', 1, NOW(), NOW()),
+                                                                                                                                (1102, 11, null, '理发', 'res:ic_sub_category_haircut', 2, NOW(), NOW()),
+                                                                                                                                (1103, 11, null, '母婴', 'res:ic_sub_category_baby', 3, NOW(), NOW()),
+                                                                                                                                (1104, 11, null, '其他', 'res:ic_category_other', 99, NOW(), NOW());
 
--- 礼金红包子分类（主分类ID=13）
-INSERT INTO `sub_category` (`category_id`, `user_id`, `name`, `category_Icon`, `sort_order`) VALUES
-                                                                                                   (13, NULL, '节日红包', NULL, 1), -- 继承主分类图标
-                                                                                                   (13, NULL, '礼金', 'res:monetization_on', 2); -- 复用主分类图标
+-- 工资 (20)
+INSERT INTO greenfinance.sub_category (id, category_id, user_id, name, category_Icon, sort_order, create_time, update_time) VALUES
+                                                                                                                                (2001, 20, null, '月薪', 'res:ic_sub_category_monthly_salary', 1, NOW(), NOW()),
+                                                                                                                                (2002, 20, null, '加班费', 'res:ic_sub_category_overtime_pay', 2, NOW(), NOW());
 
--- 其他收入子分类（主分类ID=14）
-INSERT INTO `sub_category` (`category_id`, `user_id`, `name`, `category_Icon`, `sort_order`) VALUES
-                                                                                                   (14, NULL, '退款', 'res:arrow_back', 1),
-                                                                                                   (14, NULL, '杂项', NULL, 2); -- 继承主分类图标
+-- 奖金 (21)
+INSERT INTO greenfinance.sub_category (id, category_id, user_id, name, category_Icon, sort_order, create_time, update_time) VALUES
+                                                                                                                                (2101, 21, null, '年终奖', 'res:ic_sub_category_year_end_bonus', 1, NOW(), NOW()),
+                                                                                                                                (2102, 21, null, '绩效奖', 'res:ic_sub_category_performance_bonus', 2, NOW(), NOW());
+
+-- 投资 (22)
+INSERT INTO greenfinance.sub_category (id, category_id, user_id, name, category_Icon, sort_order, create_time, update_time) VALUES
+                                                                                                                                (2201, 22, null, '理财收益', 'res:ic_sub_category_financial_income', 1, NOW(), NOW()),
+                                                                                                                                (2202, 22, null, '股票收益', 'res:ic_sub_category_stock_income', 2, NOW(), NOW());
+
+-- 兼职 (23)
+INSERT INTO greenfinance.sub_category (id, category_id, user_id, name, category_Icon, sort_order, create_time, update_time) VALUES
+                                                                                                                                (2301, 23, null, '设计兼职', 'res:ic_sub_category_design_freelance', 1, NOW(), NOW()),
+                                                                                                                                (2302, 23, null, '咨询兼职', 'res:ic_sub_category_consulting_freelance', 2, NOW(), NOW()),
+                                                                                                                                (2303, 23, null, '翻译兼职', 'res:ic_sub_category_translation_freelance', 3, NOW(), NOW());
+
+-- 退款 (24)
+INSERT INTO greenfinance.sub_category (id, category_id, user_id, name, category_Icon, sort_order, create_time, update_time) VALUES
+    (2401, 24, null, '购物退款', 'res:ic_category_refund', 1, NOW(), NOW());
+
+-- 人情收入 (25)
+INSERT INTO greenfinance.sub_category (id, category_id, user_id, name, category_Icon, sort_order, create_time, update_time) VALUES
+    (2501, 25, null, '礼金收入', 'res:ic_sub_category_gift_money', 1, NOW(), NOW());
+
+-- 生活费 (26)
+INSERT INTO greenfinance.sub_category (id, category_id, user_id, name, category_Icon, sort_order, create_time, update_time) VALUES
+    (2601, 26, null, '生活费', 'res:ic_category_living_allowance', 1, NOW(), NOW());
+
+-- 其他收入 (27)
+INSERT INTO greenfinance.sub_category (id, category_id, user_id, name, category_Icon, sort_order, create_time, update_time) VALUES
+                                                                                                                                (2701, 27, null, '中奖', 'res:ic_sub_category_lottery_winnings', 1, NOW(), NOW()),
+                                                                                                                                (2702, 27, null, '意外收入', 'res:ic_sub_category_other_income', 2, NOW(), NOW());

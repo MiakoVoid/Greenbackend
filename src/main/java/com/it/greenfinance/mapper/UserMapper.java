@@ -1,7 +1,7 @@
 package com.it.greenfinance.mapper;
 
-import com.it.greenfinance.pojo.User;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.it.greenfinance.pojo.User;
 import org.apache.ibatis.annotations.Mapper;
 
 /**

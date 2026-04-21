@@ -140,10 +140,3 @@ CREATE TABLE `system_config` (
                                  KEY `idx_system_config_user_id` (`user_id`) COMMENT '按用户ID查询配置，优化查询效率',
                                  UNIQUE KEY `uk_system_config_user_key` (`user_id`, `config_key`) COMMENT '联合唯一索引：同一用户下配置键唯一，系统默认配置（user_id=null）也唯一'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统配置表（存储系统全局配置或用户自定义配置）';
-INSERT INTO system_config (user_id, config_key, config_value, remark) VALUES
-                                                                          (NULL, 'bill_month_start_day', '1', '账单月起始日，默认为每月1日'),
-                                                                          (NULL, 'week_start_day', '1', '日期周起始日，1=周日，2=周一，默认为周日')
-ON DUPLICATE KEY UPDATE config_value = VALUES(config_value), remark = VALUES(remark);
-INSERT INTO system_config (config_key, config_value, remark) VALUES
-    ('ai_recognition_enabled', 'true', '智能识别开关，控制是否启用AI智能识别功能')
-ON DUPLICATE KEY UPDATE config_value = VALUES(config_value), remark = VALUES(remark);

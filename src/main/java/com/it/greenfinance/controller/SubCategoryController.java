@@ -9,8 +9,8 @@ import com.it.utils.UserContextUtil;
 import io.swagger.annotations.Api;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
-import javax.validation.Valid;
 
+import javax.validation.Valid;
 import java.util.List;
 
 /**

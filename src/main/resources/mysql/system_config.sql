@@ -1,0 +1,9 @@
+INSERT INTO greenfinance.system_config (id, config_key, config_value, remark, user_id, create_time, update_time) VALUES (1, 'first_day_of_month', '1', '账单月起始日，默认为每月1日', null, '2025-11-25 16:54:31', '2025-12-10 11:38:23');
+INSERT INTO greenfinance.system_config (id, config_key, config_value, remark, user_id, create_time, update_time) VALUES (2, 'week_start_day', '1', '日期周起始日，1=周日，2=周一，默认为周日', null, '2025-11-25 16:54:31', '2025-11-25 16:54:31');
+INSERT INTO greenfinance.system_config (id, config_key, config_value, remark, user_id, create_time, update_time) VALUES (3, 'ai_recognition_enabled', 'true', '智能识别开关，控制是否启用AI智能识别功能', null, '2025-11-26 09:22:42', '2025-11-26 09:22:42');
+INSERT INTO greenfinance.system_config (id, config_key, config_value, remark, user_id, create_time, update_time) VALUES (4, 'autoCreateCategory', 'false', '是否自动创建分类开关', null, '2025-12-12 15:34:59', '2025-12-12 15:34:59');
+INSERT INTO greenfinance.system_config (id, config_key, config_value, remark, user_id, create_time, update_time) VALUES (6, 'first_day_of_month', '2', null, 1, '2026-03-12 15:38:52', '2026-04-01 11:58:21');
+INSERT INTO greenfinance.system_config (id, config_key, config_value, remark, user_id, create_time, update_time) VALUES (7, 'ai_recognition_enabled', '1', null, 1, '2026-03-20 13:36:56', '2026-03-22 00:09:12');
+INSERT INTO greenfinance.system_config (id, config_key, config_value, remark, user_id, create_time, update_time) VALUES (8, 'check', '1', '是否确认', null, '2026-03-21 00:01:38', '2026-03-21 00:01:38');
+INSERT INTO greenfinance.system_config (id, config_key, config_value, remark, user_id, create_time, update_time) VALUES (9, 'week_start_day', '1', null, 1, '2026-03-21 16:18:57', '2026-03-21 16:18:57');
+INSERT INTO greenfinance.system_config (id, config_key, config_value, remark, user_id, create_time, update_time) VALUES (10, 'autoCreateCategory', '0', null, 1, '2026-03-21 16:19:13', '2026-03-21 16:19:16');

@@ -74,7 +74,7 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
     
     @Override
     public CategoryVo saveCategory(CategoryBo categoryBo, Long userId) {
-        validateCategoryForCreate(categoryBo, userId);
+        validate(categoryBo,userId);
 
         Category category = new Category();
         BeanUtils.copyProperties(categoryBo, category);
@@ -86,21 +86,42 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
         
         return categoryVo;
     }
+    private void validate(CategoryBo bo, Long userId) {
+        if (bo.getName() != null && bo.getName().trim().isEmpty()) {
+            throw new IllegalArgumentException("分类名称不能为空");
+        }
+        if (bo.getType() != null && (bo.getType() != 1 && bo.getType() != 2)) {
+            throw new IllegalArgumentException("分类类型不合法");
+        }
+        
+        // 如果更新了名称或类型，需要检查是否与用户的其他分类或系统默认分类重名
+        if (bo.getId() != null && bo.getName() != null && bo.getType() != null) {
+            // 检查是否与用户的其他分类重名
+            QueryWrapper<Category> userQueryWrapper = new QueryWrapper<>();
+            userQueryWrapper.eq("user_id", userId);
+            userQueryWrapper.eq("type", bo.getType());
+            userQueryWrapper.eq("name", bo.getName().trim());
+           if (bo.getId()!=null)userQueryWrapper.ne("id", bo.getId()); // 排除当前分类
+            Long userCount = (long) count(userQueryWrapper);
+            if (userCount > 0) {
+                throw new IllegalArgumentException("该分类名称已存在，请勿重复添加");
+            }
+            
+            // 检查是否与系统默认分类重名
+            QueryWrapper<Category> systemQueryWrapper = new QueryWrapper<>();
+            systemQueryWrapper.isNull("user_id");
+            systemQueryWrapper.eq("type", bo.getType());
+            systemQueryWrapper.eq("name", bo.getName().trim());
+            Long systemCount = (long) count(systemQueryWrapper);
+            if (systemCount > 0) {
+                throw new IllegalArgumentException("该分类名称已与系统默认分类重复，请更换其他名称");
+            }
+        }
+    }
     
     @Override
     public CategoryVo updateCategory(CategoryBo categoryBo, Long userId) {
-        if (categoryBo == null || categoryBo.getId() == null) {
-            throw new IllegalArgumentException("分类ID不能为空");
-        }
-        validateCategoryForUpdate(categoryBo);
-
-        // 检查分类是否属于当前用户
-        Category existingCategory = getById(categoryBo.getId());
-        if (existingCategory != null &&
-                (existingCategory.getUserId() == null || !existingCategory.getUserId().equals(userId))) {
-            throw new RuntimeException("无权限更新该分类");
-        }
-        
+        validate(categoryBo,userId);
         Category category = new Category();
         BeanUtils.copyProperties(categoryBo, category);
         updateById(category);
@@ -140,28 +161,50 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
         
         return true;
     }
-
-    private void validateCategoryForCreate(CategoryBo bo, Long userId) {
-        if (bo == null) {
-            throw new IllegalArgumentException("分类参数不能为空");
+    
+    @Override
+    public List<String> buildIconLibrary(Integer type) {
+        // 查询主分类的图标
+        QueryWrapper<Category> categoryQuery = new QueryWrapper<>();
+        categoryQuery.isNull("user_id"); // 只查询系统默认分类
+        if (type != null) {
+            categoryQuery.eq("type", type);
         }
-        if (userId == null) {
-            throw new IllegalArgumentException("请先登录后再创建分类");
+        categoryQuery.select("category_Icon");
+        categoryQuery.orderByAsc("sort_order");
+        List<Category> categories = list(categoryQuery);
+        
+        // 查询子分类的图标
+        QueryWrapper<SubCategory> subCategoryQuery = new QueryWrapper<>();
+        subCategoryQuery.isNull("user_id"); // 只查询系统默认子分类
+        if (type != null) {
+            // 需要先找到对应type的分类ID
+            List<Long> categoryIds = categories.stream()
+                    .map(Category::getId)
+                    .collect(java.util.stream.Collectors.toList());
+            if (!categoryIds.isEmpty()) {
+                subCategoryQuery.in("category_id", categoryIds);
+            } else {
+                // 如果没有找到对应type的分类，返回空列表
+                return new ArrayList<>();
+            }
         }
-        if (bo.getName() == null || bo.getName().trim().isEmpty()) {
-            throw new IllegalArgumentException("分类名称不能为空");
+        subCategoryQuery.select("category_Icon");
+        subCategoryQuery.orderByAsc("sort_order");
+        List<SubCategory> subCategories = subCategoryMapper.selectList(subCategoryQuery);
+        
+        // 合并主分类和子分类的图标，去重并保持顺序
+        List<String> iconList = new ArrayList<>();
+        for (Category category : categories) {
+            if (category.getCategoryIcon() != null && !category.getCategoryIcon().trim().isEmpty()) {
+                iconList.add(category.getCategoryIcon());
+            }
         }
-        if (bo.getType() == null || (bo.getType() != 1 && bo.getType() != 2)) {
-            throw new IllegalArgumentException("分类类型不合法");
+        for (SubCategory subCategory : subCategories) {
+            if (subCategory.getCategoryIcon() != null && !subCategory.getCategoryIcon().trim().isEmpty()) {
+                iconList.add(subCategory.getCategoryIcon());
+            }
         }
-    }
-
-    private void validateCategoryForUpdate(CategoryBo bo) {
-        if (bo.getName() != null && bo.getName().trim().isEmpty()) {
-            throw new IllegalArgumentException("分类名称不能为空");
-        }
-        if (bo.getType() != null && (bo.getType() != 1 && bo.getType() != 2)) {
-            throw new IllegalArgumentException("分类类型不合法");
-        }
+        return iconList;
     }
 }

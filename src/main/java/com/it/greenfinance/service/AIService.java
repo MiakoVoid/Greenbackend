@@ -1,11 +1,9 @@
 package com.it.greenfinance.service;
 
-import com.it.greenfinance.pojo.vo.AnalyzedTransactionVo;
 import com.it.greenfinance.pojo.vo.FinancialAdviceVo;
 import com.it.greenfinance.pojo.vo.OcrBillParseResultVo;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Date;
 import java.util.List;
 
 public interface AIService {
