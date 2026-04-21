@@ -5,12 +5,14 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.it.greenfinance.mapper.ExpectedExpenseMapper;
 import com.it.greenfinance.pojo.Category;
 import com.it.greenfinance.pojo.ExpectedExpense;
+import com.it.greenfinance.pojo.SubCategory;
 import com.it.greenfinance.pojo.bo.BillBo;
 import com.it.greenfinance.pojo.bo.ExpectedExpenseBo;
 import com.it.greenfinance.pojo.vo.ExpectedExpenseVo;
 import com.it.greenfinance.service.BillService;
 import com.it.greenfinance.service.CategoryService;
 import com.it.greenfinance.service.ExpectedExpenseService;
+import com.it.greenfinance.service.SubCategoryService;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 
@@ -31,10 +33,12 @@ public class ExpectedExpenseServiceImpl extends ServiceImpl<ExpectedExpenseMappe
     
     private final BillService billService;
     private final CategoryService categoryService;
+    private final SubCategoryService subCategoryService;
     
-    public ExpectedExpenseServiceImpl(BillService billService, CategoryService categoryService) {
+    public ExpectedExpenseServiceImpl(BillService billService, CategoryService categoryService, SubCategoryService subCategoryService) {
         this.billService = billService;
         this.categoryService = categoryService;
+        this.subCategoryService = subCategoryService;
     }
     
     @Override
@@ -86,7 +90,7 @@ public class ExpectedExpenseServiceImpl extends ServiceImpl<ExpectedExpenseMappe
         
         // 优先使用子分类图标和名称
         if (expense.getSubCategoryId() != null) {
-            Category subCategory = categoryService.getById(expense.getSubCategoryId());
+            SubCategory subCategory = subCategoryService.getById(expense.getSubCategoryId());
             if (subCategory != null) {
                 vo.setSubCategoryName(subCategory.getName());
                 if (subCategory.getCategoryIcon() != null) {
